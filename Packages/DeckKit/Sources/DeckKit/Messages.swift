@@ -63,6 +63,8 @@ public enum ClientMessage: Equatable, Sendable {
     case setVolume(Int)
     case volumeKey(VolumeKey)
     case typeKey(TypedKey)
+    /// 폴더 고르기: 이 폴더("~" 또는 "~/…")의 하위 폴더 목록을 달라
+    case listFolder(path: String)
 }
 
 /// 맥 → 기기
@@ -85,12 +87,14 @@ public enum ServerMessage: Equatable, Sendable {
     /// available == false: 지금 출력 장치(예: DisplayPort 모니터)는 macOS가 소리 크기를 모른다. 값을 못 보여준다.
     /// keysAllowed == false: 맥 앱에 손쉬운 사용 권한이 없어서 볼륨 키 신호를 못 보낸다.
     case volume(value: Int, muted: Bool, available: Bool, keysAllowed: Bool)
+    /// 폴더 고르기 답. children은 하위 폴더 이름(숨김 폴더, 앱 제외). 없는 폴더거나 홈 밖이면 ok == false
+    case folder(path: String, children: [String], ok: Bool)
 }
 
 /// 모든 메시지가 쓰는 JSON 키. 최상위 `type`으로 종류를 나눈다.
 private enum Key: String, CodingKey {
     case type, deviceId, deviceName, publicKey, proof, page, index, button, value
-    case remaining, nonce, pages, items, ok, message, muted, available, keysAllowed, key
+    case remaining, nonce, pages, items, ok, message, muted, available, keysAllowed, key, path, children
 }
 
 extension ClientMessage: Codable {
@@ -116,6 +120,7 @@ extension ClientMessage: Codable {
         case "setVolume": self = .setVolume(try c.decode(Int.self, forKey: .value))
         case "volumeKey": self = .volumeKey(try c.decode(VolumeKey.self, forKey: .key))
         case "typeKey": self = .typeKey(try c.decode(TypedKey.self, forKey: .key))
+        case "listFolder": self = .listFolder(path: try c.decode(String.self, forKey: .path))
         case let other:
             throw DecodingError.dataCorruptedError(forKey: .type, in: c, debugDescription: "unknown type \(other)")
         }
@@ -160,6 +165,9 @@ extension ClientMessage: Codable {
         case .typeKey(let key):
             try c.encode("typeKey", forKey: .type)
             try c.encode(key, forKey: .key)
+        case .listFolder(let path):
+            try c.encode("listFolder", forKey: .type)
+            try c.encode(path, forKey: .path)
         }
     }
 }
@@ -184,6 +192,9 @@ extension ServerMessage: Codable {
                                 index: try c.decode(Int.self, forKey: .index),
                                 ok: try c.decode(Bool.self, forKey: .ok),
                                 message: try c.decodeIfPresent(String.self, forKey: .message))
+        case "folder":
+            self = .folder(path: try c.decode(String.self, forKey: .path), children: try c.decode([String].self, forKey: .children),
+                           ok: try c.decode(Bool.self, forKey: .ok))
         case "volume":
             self = .volume(value: try c.decode(Int.self, forKey: .value), muted: try c.decode(Bool.self, forKey: .muted),
                            available: try c.decodeIfPresent(Bool.self, forKey: .available) ?? true,
@@ -228,6 +239,11 @@ extension ServerMessage: Codable {
             try c.encode(index, forKey: .index)
             try c.encode(ok, forKey: .ok)
             try c.encodeIfPresent(message, forKey: .message)
+        case .folder(let path, let children, let ok):
+            try c.encode("folder", forKey: .type)
+            try c.encode(path, forKey: .path)
+            try c.encode(children, forKey: .children)
+            try c.encode(ok, forKey: .ok)
         case .volume(let value, let muted, let available, let keysAllowed):
             try c.encode("volume", forKey: .type)
             try c.encode(value, forKey: .value)

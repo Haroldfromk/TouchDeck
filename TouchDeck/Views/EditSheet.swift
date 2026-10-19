@@ -140,11 +140,7 @@ struct EditSheet: View {
                 .keyboardType(.asciiCapable)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
-            TextField("실행할 폴더 (선택, 예: ~/Documents/Workspace/blog)", text: $directory)
-                .font(.body.monospaced())
-                .keyboardType(.asciiCapable)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
+            folderField("실행할 폴더 (비우면 홈 폴더)")
         } footer: {
             Text("맥에서 Alacritty 새 창이 열리고, 평소 쓰는 zsh에서 이 명령이 실행돼요. ~/.zshrc의 별칭도 그대로 쓸 수 있어요. 끝나도 창은 남아 있어요.")
         }
@@ -153,13 +149,24 @@ struct EditSheet: View {
     private var terminalSection: some View {
         Section {
             TextField("이름 (예: 새 터미널)", text: $label)
-            TextField("시작 폴더 (선택)", text: $directory)
-                .font(.body.monospaced())
-                .keyboardType(.asciiCapable)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
+            folderField("시작 폴더 (비우면 홈 폴더)")
         } footer: {
             Text("Alacritty가 이미 켜져 있어도 빈 창이 하나 더 열려요.")
+        }
+    }
+
+    /// 맥 폴더 경로. 직접 칠 수도 있고, 폴더 고르기로 맥의 폴더를 눌러 가며 고를 수도 있다
+    @ViewBuilder
+    private func folderField(_ placeholder: String) -> some View {
+        TextField(placeholder, text: $directory)
+            .font(.body.monospaced())
+            .keyboardType(.asciiCapable)
+            .textInputAutocapitalization(.never)
+            .autocorrectionDisabled()
+        NavigationLink {
+            FolderPickerView(client: client, start: FolderPath.isInsideHome(directory) ? directory : "~") { directory = $0 }
+        } label: {
+            Label("맥에서 폴더 고르기", systemImage: "folder")
         }
     }
 

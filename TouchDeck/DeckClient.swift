@@ -38,6 +38,13 @@ final class DeckClient {
     /// 맥 앱이 볼륨 키 신호를 보낼 수 있는지 (손쉬운 사용 권한)
     private(set) var volumeKeysAllowed = true
     private(set) var lastResult: PressFeedback?
+    private(set) var folderListing: FolderListing?
+
+    struct FolderListing: Equatable {
+        let path: String
+        let children: [String]
+        let ok: Bool
+    }
 
     private var browser: NWBrowser?
     private var channel: WebSocketChannel?
@@ -108,6 +115,9 @@ final class DeckClient {
 
     /// 숫자 키패드. 맥에서 앞에 떠 있는 앱에 이 키를 누른 것처럼 입력된다. 친 키는 기억하지 않는다.
     func typeKey(_ key: TypedKey) { send(.typeKey(key)) }
+
+    /// 폴더 고르기: 맥에 이 폴더의 하위 폴더 목록을 묻는다. 답은 folderListing으로 온다
+    func listFolder(_ path: String) { send(.listFolder(path: path)) }
 
     /// 허락받은 뒤에는 서명된 봉투에 넣어 보낸다.
     private func send(_ message: ClientMessage) {
@@ -262,6 +272,8 @@ final class DeckClient {
             icons = Dictionary(uniqueKeysWithValues: apps.compactMap { app in
                 Data(base64Encoded: app.icon).flatMap(UIImage.init(data:)).map { (app.bundleId, $0) }
             })
+        case .folder(let path, let children, let ok):
+            folderListing = FolderListing(path: path, children: children, ok: ok)
         case .pressResult(let page, let index, let ok, let message):
             lastResult = PressFeedback(page: page, index: index, ok: ok, message: message)
         case .volume(let value, let muted, let available, let keysAllowed):

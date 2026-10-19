@@ -289,6 +289,17 @@ final class DeckServer {
         case .typeKey(let key):
             Task { _ = await actions.typeKey(key) }
 
+        case .listFolder(let path):
+            // 폴더 고르기는 홈 폴더 안에서만. 문서/데스크탑 폴더를 처음 읽을 땐 macOS가 허락 창을 띄울 수 있다
+            guard FolderPath.isInsideHome(path) else {
+                session.send(.folder(path: path, children: [], ok: false))
+                return
+            }
+            Task {
+                let children = await Task.detached { FolderLister.children(atPath: AlacrittyCommand.expandTilde(path)) }.value
+                session.send(.folder(path: path, children: children ?? [], ok: children != nil))
+            }
+
         case .hello, .pair, .auth:
             break
         }

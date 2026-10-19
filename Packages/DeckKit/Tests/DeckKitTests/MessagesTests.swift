@@ -35,6 +35,8 @@ import Testing
         .pressResult(page: 0, index: 1, ok: true, message: nil),
         .volume(value: 30, muted: true, available: true, keysAllowed: true),
         .volume(value: 0, muted: false, available: false, keysAllowed: false),
+        .folder(path: "~/Documents", children: ["Workspace", "블로그"], ok: true),
+        .folder(path: "~/nope", children: [], ok: false),
     ]
     for m in all { #expect(try ServerMessage.decode(m.encoded()) == m) }
 }
@@ -43,6 +45,7 @@ import Testing
     let all: [ClientMessage] = [
         .hello(deviceId: "d", deviceName: "Harold의 iPad", nonce: "c1"), .pair(publicKey: "cHVi", proof: "ab"), .auth(proof: "ab"),
         .getApps, .clearButton(page: 0, index: 0), .volumeKey(.up), .volumeKey(.down), .volumeKey(.mute),
+        .listFolder(path: "~"), .listFolder(path: "~/Documents"),
         .typeKey(.digit(0)), .typeKey(.digit(7)), .typeKey(.tab), .typeKey(.delete), .typeKey(.enter),
     ]
     for m in all { #expect(try ClientMessage.decode(m.encoded()) == m) }
