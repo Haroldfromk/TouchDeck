@@ -4,6 +4,9 @@ import SwiftUI
 /// 메뉴바 아이콘을 누르면 뜨는 작은 창. 편집 화면은 두지 않는다 (편집은 아이패드/아이폰에서).
 struct MenuContent: View {
     let server: DeckServer
+    var loginItem = LoginItem.live
+    @State private var launchAtLogin = false
+    @State private var loginError: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -59,10 +62,24 @@ struct MenuContent: View {
             }
 
             Divider()
+            VStack(alignment: .leading, spacing: 4) {
+                Toggle("로그인 시 자동 실행", isOn: Binding(
+                    get: { launchAtLogin },
+                    set: { on in
+                        loginError = loginItem.set(on)
+                        launchAtLogin = loginItem.isOn
+                    }
+                ))
+                if let note = loginError ?? (launchAtLogin ? loginItem.note : nil) {
+                    Text(note).font(.caption).foregroundStyle(.secondary)
+                }
+            }
             Button("TouchDeck 종료") { NSApplication.shared.terminate(nil) }
         }
         .padding(14)
         .frame(width: 280)
+        // 시스템 설정에서 바꿨을 수도 있으니 창을 열 때마다 다시 읽는다
+        .onAppear { launchAtLogin = loginItem.isOn }
     }
 
     private func section<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
