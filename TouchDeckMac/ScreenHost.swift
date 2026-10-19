@@ -143,6 +143,30 @@ final class ScreenHost {
         PointerInjector.post(plan.steps(for: event, display: display, now: .now))
     }
 
+    /// 보기 화면 입력칸의 글. 화면 조작과 같은 조건(보는 기기, 스트림 있음, 안 잠김)에서만 넣는다
+    func typeText(_ text: String, from session: ClientSession) {
+        guard canType(from: session) else { return }
+        // 보내는 쪽이 고장 나도 중간에 엔터가 눌리지 않게 맥에서도 다시 다듬는다
+        let cleaned = TextInput.clean(text)
+        guard !cleaned.isEmpty else { return }
+        RemoteTyper.shared.type(cleaned)
+    }
+
+    func pressKey(_ key: RemoteKey, from session: ClientSession) {
+        guard canType(from: session) else { return }
+        RemoteTyper.shared.press(key)
+    }
+
+    private func canType(from session: ClientSession) -> Bool {
+        guard session === viewer, streamer != nil, !ScreenLock.isLocked else { return false }
+        guard MediaKey.allowed else {
+            if !warnedNoInput { session.send(.screenStatus(.noInput, message: nil)) }
+            warnedNoInput = true
+            return false
+        }
+        return true
+    }
+
     /// 맥 메뉴의 "끊기"
     func disconnect() {
         viewer?.send(.screenStatus(.stopped, message: "맥에서 화면 보기를 끊었어요"))

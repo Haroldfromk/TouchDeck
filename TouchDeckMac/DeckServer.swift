@@ -343,8 +343,11 @@ final class DeckServer {
         case .screenOptions(let fps, let audio):
             screen.options(session, fps: fps, audio: audio)
 
-        case .typeText, .pressKey:
-            break
+        case .typeText(let text):
+            screen.typeText(text, from: session)
+
+        case .pressKey(let key):
+            screen.pressKey(key, from: session)
 
         case .hello, .pair, .auth:
             break
@@ -357,7 +360,8 @@ final class DeckServer {
 
     private static func isQuiet(_ message: ClientMessage) -> Bool {
         switch message {
-        case .typeKey, .pointer, .requestKeyframe: true
+        // 입력칸 글과 특수 키도 비밀번호일 수 있어서 남기지 않는다
+        case .typeKey, .pointer, .requestKeyframe, .typeText, .pressKey: true
         default: false
         }
     }
@@ -406,6 +410,9 @@ final class DeckServer {
     }
 
     private func refreshDevices() {
-        connectedDevices = sessions.filter { $0.stage == .authorized }.compactMap(\.deviceName)
+        // 기기 앱이 맥보다 예전 버전이면 이름 옆에 알린다
+        connectedDevices = sessions.filter { $0.stage == .authorized }.compactMap { session in
+            session.deviceName.map { session.protocolVersion < DeckProtocol.current ? "\($0) (앱 업데이트 필요)" : $0 }
+        }
     }
 }
