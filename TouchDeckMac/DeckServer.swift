@@ -327,7 +327,7 @@ final class DeckServer {
         case .listDisplays:
             screen.listDisplays(for: session, allowed: screenAllowed(session))
 
-        case .startScreen(let displayId, let maxSide):
+        case .startScreen(let displayId, let maxSide, _, _):
             screen.start(session, displayId: displayId, maxSide: maxSide, allowed: screenAllowed(session))
 
         case .stopScreen:
@@ -338,6 +338,9 @@ final class DeckServer {
 
         case .pointer(let event):
             screen.pointer(event, from: session)
+
+        case .screenOptions:
+            break
 
         case .hello, .pair, .auth:
             break

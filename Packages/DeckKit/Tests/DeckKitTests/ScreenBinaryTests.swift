@@ -180,3 +180,19 @@ func sendsBinaryOverLoopback() async throws {
     steps.append(gate.begin(keyframe: false))
     #expect(steps == [true, false, true, false, false, true, true])
 }
+
+// MARK: - fps별 보내기 한도
+
+@Test func gateLimitFollowsFps() {
+    #expect(SendGate.limit(forFPS: 30) == 2)
+    #expect(SendGate.limit(forFPS: 60) == 4)
+}
+
+@Test func changingLimitKeepsInFlight() {
+    var gate = SendGate(limit: 2)
+    let first = [gate.begin(keyframe: true), gate.begin(keyframe: false)]
+    gate.limit = 4
+    let more = [gate.begin(keyframe: false), gate.begin(keyframe: false), gate.begin(keyframe: false)]
+    #expect(first == [true, true])
+    #expect(more == [true, true, false])
+}

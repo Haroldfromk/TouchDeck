@@ -57,7 +57,8 @@ public struct VideoPacket: Equatable, Sendable {
 
 /// 보내는 중인 프레임 수를 세서 밀리면 버린다. 와이파이가 느려질 때 지연이 쌓이지 않고 최신 화면으로 따라잡게.
 public struct SendGate: Sendable {
-    public let limit: Int
+    /// 보는 중에 fps를 바꾸면 한도도 바뀐다. 보내는 중인 수는 그대로 이어 간다
+    public var limit: Int
     private var inFlight = 0
     /// 하나라도 버렸으면 키프레임이 올 때까지 다 버린다 (버린 프레임을 참조하는 프레임은 깨져 보인다)
     private var waitingForKeyframe = false
@@ -65,6 +66,11 @@ public struct SendGate: Sendable {
 
     public init(limit: Int = 2) {
         self.limit = limit
+    }
+
+    /// 밀릴 때 버리는 기준을 시간으로 같게: 30fps는 2장, 60fps는 4장 (둘 다 약 0.07초)
+    public static func limit(forFPS fps: Int) -> Int {
+        max(1, fps / 15)
     }
 
     /// 이 프레임을 보내도 되면 true (보낸 것으로 센다)

@@ -40,6 +40,17 @@ public struct PointerEvent: Codable, Equatable, Sendable {
     }
 }
 
+/// 화면 보기 프레임 수. 30과 60만 쓴다
+public enum ScreenFPS {
+    public static let low = 30
+    public static let high = 60
+
+    /// 30, 60이 아닌 값은 가까운 쪽으로 (45부터 60)
+    public static func normalize(_ value: Int) -> Int {
+        value < 45 ? low : high
+    }
+}
+
 /// 화면 보기 요청에 대한 맥의 답
 public enum ScreenState: String, Codable, Sendable {
     case ok

@@ -6,7 +6,7 @@ import Testing
 
 @Test func screenClientMessagesRoundTrip() throws {
     let all: [ClientMessage] = [
-        .listDisplays, .startScreen(displayId: 69_734_208, maxSide: 1920), .stopScreen, .requestKeyframe,
+        .listDisplays, .startScreen(displayId: 69_734_208, maxSide: 1920, fps: 30, audio: false), .stopScreen, .requestKeyframe,
         .pointer(PointerEvent(kind: .click, x: 0.25, y: 0.75)),
         .pointer(PointerEvent(kind: .scroll, x: 0.5, y: 0.5, dx: -3, dy: 12.5)),
         .pointer(PointerEvent(kind: .down, x: 0, y: 1)), .pointer(PointerEvent(kind: .move, x: 0.1, y: 0.2)),
@@ -35,6 +35,31 @@ import Testing
         .screenStatus(.locked, message: nil), .screenStatus(.stopped, message: nil), .screenStatus(.noInput, message: nil),
     ]
     for m in all { #expect(try ServerMessage.decode(m.encoded()) == m) }
+}
+
+// MARK: - 2차: fps와 소리
+
+@Test func startScreenRoundTripsFpsAndAudio() throws {
+    let message = ClientMessage.startScreen(displayId: 7, maxSide: 2388, fps: 60, audio: true)
+    #expect(try ClientMessage.decode(message.encoded()) == message)
+}
+
+@Test func startScreenWithoutNewFieldsDefaults() throws {
+    let old = #"{"type":"startScreen","displayId":7,"maxSide":2388}"#
+    #expect(try ClientMessage.decode(old) == .startScreen(displayId: 7, maxSide: 2388, fps: 30, audio: false))
+}
+
+@Test func screenOptionsRoundTrips() throws {
+    let message = ClientMessage.screenOptions(fps: 30, audio: false)
+    #expect(try ClientMessage.decode(message.encoded()) == message)
+}
+
+@Test func oddFpsIsNormalizedOnDecode() throws {
+    let text = #"{"type":"screenOptions","fps":45,"audio":true}"#
+    #expect(try ClientMessage.decode(text) == .screenOptions(fps: 60, audio: true))
+    #expect(ScreenFPS.normalize(44) == 30)
+    #expect(ScreenFPS.normalize(0) == 30)
+    #expect(ScreenFPS.normalize(120) == 60)
 }
 
 // MARK: - 허락한 기기의 화면 허용

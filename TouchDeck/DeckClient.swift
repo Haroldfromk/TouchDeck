@@ -156,7 +156,7 @@ final class DeckClient {
         guard isConnected else { return }
         screenNotice = nil
         video.reset()
-        send(.startScreen(displayId: displayId, maxSide: screenPixelLongSide))
+        send(.startScreen(displayId: displayId, maxSide: screenPixelLongSide, fps: 30, audio: false))
     }
 
     /// 11인치 아이패드는 2388, 12.9인치는 2732
