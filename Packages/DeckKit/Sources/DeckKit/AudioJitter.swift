@@ -8,7 +8,7 @@ public struct AudioJitter: Sendable {
     public static let dropAbove = 0.2
     /// 버리다가 이 아래로 내려가면 다시 받는다
     public static let resumeBelow = 0.1
-    /// 0.02를 여러 번 더하면 끝자리가 어긋난다(0.2000…04). 경계는 이만큼 여유를 두고 비교한다
+    /// 0.02를 여러 번 더하면 끝자리가 어긋난다(0.1999…98). 경계는 이만큼 여유를 두고 비교한다
     private static let epsilon = 1e-9
 
     public enum Decision: Equatable, Sendable {
