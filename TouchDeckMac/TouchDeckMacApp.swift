@@ -12,6 +12,8 @@ struct TouchDeckMacApp: App {
         // 단위 테스트가 이 앱을 띄울 때는 서버를 열지 않는다 (진짜 서버와 포트가 겹친다)
         if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil {
             server.start()
+            // 볼륨 키 신호에 손쉬운 사용 권한이 필요하다. 없으면 시스템이 설정으로 안내하는 창을 띄운다
+            MediaKey.requestPermissionIfNeeded()
         }
         _server = State(initialValue: server)
     }
@@ -59,8 +61,13 @@ final class LiveActions: DeckActions {
         return apps
     }
 
-    func volume() async -> (value: Int, muted: Bool, available: Bool) {
-        await Task.detached { VolumeController.get() }.value
+    func volume() async -> (value: Int, muted: Bool, available: Bool, keysAllowed: Bool) {
+        let v = await Task.detached { VolumeController.get() }.value
+        return (v.value, v.muted, v.available, MediaKey.allowed)
+    }
+
+    func pressVolumeKey(_ key: VolumeKey) async -> Bool {
+        MediaKey.press(key)
     }
 
     func setVolume(_ value: Int) async {

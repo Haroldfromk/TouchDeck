@@ -33,6 +33,8 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.harold.TouchDeck
         TARGETED_DEVICE_FAMILY: "1,2"
+        DEVELOPMENT_TEAM: LA95MXQ3R5
+        CODE_SIGN_STYLE: Automatic
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
   TouchDeckMac:
     type: application
@@ -52,8 +54,9 @@ targets:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ENABLE_APP_SANDBOX: NO
         ENABLE_HARDENED_RUNTIME: NO
-        CODE_SIGN_IDENTITY: "-"
-        CODE_SIGN_STYLE: Manual
+        # 손쉬운 사용 권한이 빌드마다 풀리지 않게 팀 서명으로 고정 (xcodegen 다시 돌려도 유지)
+        DEVELOPMENT_TEAM: LA95MXQ3R5
+        CODE_SIGN_STYLE: Automatic
   TouchDeckMacTests:
     type: bundle.unit-test
     platform: macOS
@@ -62,8 +65,8 @@ targets:
       - target: TouchDeckMac
     settings:
       base:
-        CODE_SIGN_IDENTITY: "-"
-        CODE_SIGN_STYLE: Manual
+        DEVELOPMENT_TEAM: LA95MXQ3R5
+        CODE_SIGN_STYLE: Automatic
         GENERATE_INFOPLIST_FILE: YES
         TEST_HOST: "$(BUILT_PRODUCTS_DIR)/TouchDeck.app/Contents/MacOS/TouchDeck"
         BUNDLE_LOADER: "$(TEST_HOST)"

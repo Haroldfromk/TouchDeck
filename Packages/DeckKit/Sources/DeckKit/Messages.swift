@@ -14,6 +14,11 @@ public struct AppInfo: Codable, Equatable, Hashable, Sendable {
 }
 
 /// 기기(아이패드, 아이폰, 나중에 ESP32) → 맥
+/// 키보드의 볼륨 키와 같은 것. 맥이 같은 신호를 내서, 출력 장치에 맞는 쪽(macOS나 BetterDisplay)이 받는다.
+public enum VolumeKey: String, Codable, Sendable {
+    case up, down, mute
+}
+
 /// 허락받기 전에는 hello, pair, auth만 그대로 보낸다. 나머지는 SecureChannel 봉투에 넣어 보낸다.
 public enum ClientMessage: Equatable, Sendable {
     case hello(deviceId: String, deviceName: String, nonce: String)
@@ -25,6 +30,7 @@ public enum ClientMessage: Equatable, Sendable {
     case setButton(page: Int, index: Int, button: DeckButton)
     case clearButton(page: Int, index: Int)
     case setVolume(Int)
+    case volumeKey(VolumeKey)
 }
 
 /// 맥 → 기기
@@ -44,14 +50,15 @@ public enum ServerMessage: Equatable, Sendable {
     case layout(DeckLayout)
     case apps([AppInfo])
     case pressResult(page: Int, index: Int, ok: Bool, message: String?)
-    /// available == false: 지금 출력 장치(예: DisplayPort 모니터)는 소리 크기를 바꿀 수 없다.
-    case volume(value: Int, muted: Bool, available: Bool)
+    /// available == false: 지금 출력 장치(예: DisplayPort 모니터)는 macOS가 소리 크기를 모른다. 값을 못 보여준다.
+    /// keysAllowed == false: 맥 앱에 손쉬운 사용 권한이 없어서 볼륨 키 신호를 못 보낸다.
+    case volume(value: Int, muted: Bool, available: Bool, keysAllowed: Bool)
 }
 
 /// 모든 메시지가 쓰는 JSON 키. 최상위 `type`으로 종류를 나눈다.
 private enum Key: String, CodingKey {
     case type, deviceId, deviceName, publicKey, proof, page, index, button, value
-    case remaining, nonce, pages, items, ok, message, muted, available
+    case remaining, nonce, pages, items, ok, message, muted, available, keysAllowed, key
 }
 
 extension ClientMessage: Codable {
@@ -75,6 +82,7 @@ extension ClientMessage: Codable {
         case "clearButton":
             self = .clearButton(page: try c.decode(Int.self, forKey: .page), index: try c.decode(Int.self, forKey: .index))
         case "setVolume": self = .setVolume(try c.decode(Int.self, forKey: .value))
+        case "volumeKey": self = .volumeKey(try c.decode(VolumeKey.self, forKey: .key))
         case let other:
             throw DecodingError.dataCorruptedError(forKey: .type, in: c, debugDescription: "unknown type \(other)")
         }
@@ -113,6 +121,9 @@ extension ClientMessage: Codable {
         case .setVolume(let value):
             try c.encode("setVolume", forKey: .type)
             try c.encode(value, forKey: .value)
+        case .volumeKey(let key):
+            try c.encode("volumeKey", forKey: .type)
+            try c.encode(key, forKey: .key)
         }
     }
 }
@@ -139,7 +150,8 @@ extension ServerMessage: Codable {
                                 message: try c.decodeIfPresent(String.self, forKey: .message))
         case "volume":
             self = .volume(value: try c.decode(Int.self, forKey: .value), muted: try c.decode(Bool.self, forKey: .muted),
-                           available: try c.decodeIfPresent(Bool.self, forKey: .available) ?? true)
+                           available: try c.decodeIfPresent(Bool.self, forKey: .available) ?? true,
+                           keysAllowed: try c.decodeIfPresent(Bool.self, forKey: .keysAllowed) ?? true)
         case let other:
             throw DecodingError.dataCorruptedError(forKey: .type, in: c, debugDescription: "unknown type \(other)")
         }
@@ -180,11 +192,12 @@ extension ServerMessage: Codable {
             try c.encode(index, forKey: .index)
             try c.encode(ok, forKey: .ok)
             try c.encodeIfPresent(message, forKey: .message)
-        case .volume(let value, let muted, let available):
+        case .volume(let value, let muted, let available, let keysAllowed):
             try c.encode("volume", forKey: .type)
             try c.encode(value, forKey: .value)
             try c.encode(muted, forKey: .muted)
             try c.encode(available, forKey: .available)
+            try c.encode(keysAllowed, forKey: .keysAllowed)
         }
     }
 }

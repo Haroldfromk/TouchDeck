@@ -33,8 +33,8 @@ import Testing
         .authorized, .unauthorized, .apps([AppInfo(name: "Xcode", bundleId: "com.apple.dt.Xcode", icon: "AAA")]),
         .pressResult(page: 0, index: 1, ok: false, message: "폴더 없음: /x"),
         .pressResult(page: 0, index: 1, ok: true, message: nil),
-        .volume(value: 30, muted: true, available: true),
-        .volume(value: 0, muted: false, available: false),
+        .volume(value: 30, muted: true, available: true, keysAllowed: true),
+        .volume(value: 0, muted: false, available: false, keysAllowed: false),
     ]
     for m in all { #expect(try ServerMessage.decode(m.encoded()) == m) }
 }
@@ -42,7 +42,7 @@ import Testing
 @Test func everyClientMessageRoundTrips() throws {
     let all: [ClientMessage] = [
         .hello(deviceId: "d", deviceName: "Harold의 iPad", nonce: "c1"), .pair(publicKey: "cHVi", proof: "ab"), .auth(proof: "ab"),
-        .getApps, .clearButton(page: 0, index: 0),
+        .getApps, .clearButton(page: 0, index: 0), .volumeKey(.up), .volumeKey(.down), .volumeKey(.mute),
     ]
     for m in all { #expect(try ClientMessage.decode(m.encoded()) == m) }
 }
@@ -52,11 +52,16 @@ import Testing
 }
 
 @Test func volumeWithoutAvailableKeyMeansAvailable() throws {
-    #expect(try ServerMessage.decode(#"{"type":"volume","value":40,"muted":false}"#) == .volume(value: 40, muted: false, available: true))
+    #expect(try ServerMessage.decode(#"{"type":"volume","value":40,"muted":false}"#) == .volume(value: 40, muted: false, available: true, keysAllowed: true))
 }
 
 @Test func pairMessageCarriesNoCode() throws {
     // 4자리 숫자는 네트워크로 나가지 않는다. 공개 키와 증명만 간다.
     let text = try ClientMessage.pair(publicKey: "cHVi", proof: "ab").encoded()
     #expect(text == #"{"proof":"ab","publicKey":"cHVi","type":"pair"}"#)
+}
+
+@Test func volumeKeyShape() throws {
+    // 해피해킹 볼륨 키처럼 "올림/내림/음소거"만 보낸다. 지금 몇 %인지는 몰라도 된다.
+    #expect(try ClientMessage.volumeKey(.up).encoded() == #"{"key":"up","type":"volumeKey"}"#)
 }

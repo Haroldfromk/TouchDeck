@@ -24,14 +24,12 @@ struct DeckView: View {
                 if landscape {
                     HStack(spacing: 18) {
                         pages(columns: DeckConstants.columns)
-                        VolumeSlider(value: client.volume, available: client.volumeAvailable, vertical: true,
-                                     onChange: client.setVolume, onToggleMute: client.toggleMute)
+                        VolumeKeys(client: client, vertical: true)
                             .frame(width: 76)
                     }
                 } else {
                     pages(columns: 3)
-                    VolumeSlider(value: client.volume, available: client.volumeAvailable, vertical: false,
-                                 onChange: client.setVolume, onToggleMute: client.toggleMute)
+                    VolumeKeys(client: client, vertical: false)
                         .frame(height: 64)
                 }
             }
@@ -41,6 +39,7 @@ struct DeckView: View {
         }
         .background(DeckTheme.body.ignoresSafeArea())
         .overlay(alignment: .bottom) { failureBanner }
+        .overlay(alignment: .bottom) { volumePermissionBanner }
         .sheet(item: $editing) { target in
             EditSheet(client: client, target: target)
         }
@@ -97,6 +96,21 @@ struct DeckView: View {
     private func appIcon(_ button: DeckButton?) -> UIImage? {
         guard case .app(let bundleId)? = button?.action else { return nil }
         return client.icons[bundleId]
+    }
+
+    /// 맥 앱에 손쉬운 사용 권한이 없으면 볼륨 키 신호를 못 보낸다. 켜는 곳을 알려준다.
+    @ViewBuilder
+    private var volumePermissionBanner: some View {
+        if client.isConnected && !client.volumeKeysAllowed && failure == nil {
+            Label("볼륨 키를 쓰려면 맥의 시스템 설정 > 개인정보 보호 및 보안 > 손쉬운 사용에서 TouchDeck을 켜 주세요",
+                  systemImage: "hand.raised.fill")
+                .font(.callout.weight(.medium))
+                .foregroundStyle(DeckTheme.legend)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .background(DeckTheme.terminal.opacity(0.85), in: .capsule)
+                .padding(.bottom, 28)
+        }
     }
 
     @ViewBuilder

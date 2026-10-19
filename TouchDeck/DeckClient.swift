@@ -32,15 +32,16 @@ final class DeckClient {
     private(set) var apps: [AppInfo] = []
     private(set) var icons: [String: UIImage] = [:]
     private(set) var volume = 0
+    private(set) var muted = false
+    /// macOS가 지금 소리 크기를 아는지 (DisplayPort 모니터면 모른다)
     private(set) var volumeAvailable = true
+    /// 맥 앱이 볼륨 키 신호를 보낼 수 있는지 (손쉬운 사용 권한)
+    private(set) var volumeKeysAllowed = true
     private(set) var lastResult: PressFeedback?
 
     private var browser: NWBrowser?
     private var channel: WebSocketChannel?
     private var macName = ""
-    private var pendingVolume: Int?
-    private var volumeTask: Task<Void, Never>?
-    private var volumeBeforeMute = 50
 
     // 이번 접속의 키 교환/서명 상태. 접속이 바뀌면 전부 새로 시작한다.
     private var clientNonce = ""
@@ -83,27 +84,8 @@ final class DeckClient {
     func setButton(_ button: DeckButton, page: Int, index: Int) { send(.setButton(page: page, index: index, button: button)) }
     func clearButton(page: Int, index: Int) { send(.clearButton(page: page, index: index)) }
 
-    /// 슬라이더를 끄는 동안 메시지가 쏟아지지 않게 0.1초에 한 번만 보낸다.
-    func setVolume(_ value: Int) {
-        volume = value
-        pendingVolume = value
-        guard volumeTask == nil else { return }
-        volumeTask = Task {
-            try? await Task.sleep(for: .milliseconds(100))
-            if let value = pendingVolume { send(.setVolume(value)) }
-            pendingVolume = nil
-            volumeTask = nil
-        }
-    }
-
-    func toggleMute() {
-        if volume > 0 {
-            volumeBeforeMute = volume
-            setVolume(0)
-        } else {
-            setVolume(volumeBeforeMute)
-        }
-    }
+    /// 키보드 볼륨 키처럼 올림/내림/음소거만 보낸다. 맥이 같은 신호를 내서 macOS나 BetterDisplay가 받는다.
+    func pressVolumeKey(_ key: VolumeKey) { send(.volumeKey(key)) }
 
     /// 허락받은 뒤에는 서명된 봉투에 넣어 보낸다.
     private func send(_ message: ClientMessage) {
@@ -260,9 +242,11 @@ final class DeckClient {
             })
         case .pressResult(let page, let index, let ok, let message):
             lastResult = PressFeedback(page: page, index: index, ok: ok, message: message)
-        case .volume(let value, _, let available):
-            if pendingVolume == nil { volume = value }
+        case .volume(let value, let muted, let available, let keysAllowed):
+            volume = value
+            self.muted = muted
             volumeAvailable = available
+            volumeKeysAllowed = keysAllowed
         }
     }
 }

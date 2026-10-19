@@ -8,8 +8,10 @@ import Observation
 protocol DeckActions {
     func run(_ action: ButtonAction) async -> (ok: Bool, message: String?)
     func apps() async -> [AppInfo]
-    func volume() async -> (value: Int, muted: Bool, available: Bool)
+    func volume() async -> (value: Int, muted: Bool, available: Bool, keysAllowed: Bool)
     func setVolume(_ value: Int) async
+    /// 볼륨 키 신호를 보낸다. 권한이 없어서 못 보냈으면 false
+    func pressVolumeKey(_ key: VolumeKey) async -> Bool
 }
 
 /// NWListener 하나로 WebSocket 서버와 Bonjour 광고를 같이 한다.
@@ -233,7 +235,7 @@ final class DeckServer {
         refreshDevices()
         Task {
             let volume = await actions.volume()
-            session.send(.volume(value: volume.value, muted: volume.muted, available: volume.available))
+            session.send(.volume(value: volume.value, muted: volume.muted, available: volume.available, keysAllowed: volume.keysAllowed))
             session.send(.apps(await actions.apps()))
         }
     }
@@ -265,13 +267,25 @@ final class DeckServer {
         case .setVolume(let value):
             Task {
                 await actions.setVolume(value)
-                let volume = await actions.volume()
-                broadcast(.volume(value: volume.value, muted: volume.muted, available: volume.available))
+                await broadcastVolume()
+            }
+
+        case .volumeKey(let key):
+            Task {
+                _ = await actions.pressVolumeKey(key)
+                // 키 신호는 바로 반영되지 않을 수 있어서 잠깐 기다렸다가 읽는다
+                try? await Task.sleep(for: .milliseconds(150))
+                await broadcastVolume()
             }
 
         case .hello, .pair, .auth:
             break
         }
+    }
+
+    private func broadcastVolume() async {
+        let volume = await actions.volume()
+        broadcast(.volume(value: volume.value, muted: volume.muted, available: volume.available, keysAllowed: volume.keysAllowed))
     }
 
     private func editLayout(_ session: ClientSession, _ edit: (inout DeckLayout) throws -> Void) {
