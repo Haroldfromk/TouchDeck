@@ -67,7 +67,8 @@ final class EndToEndUITests: XCTestCase {
         XCTAssertTrue(search.waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label BEGINSWITH '맥에 설치된 앱'")).firstMatch.waitForExistence(timeout: 20))
         shot("16-search-empty")
-        search.typeText("notes")   // 새 버튼이면 검색창에 바로 커서가 가 있다
+        search.tap()   // 검색창은 직접 눌러야 커서가 간다
+        search.typeText("notes")
         XCTAssertTrue(app.buttons["메모"].waitForExistence(timeout: 5), "notes로 메모가 안 나옴")
         XCTAssertTrue(app.staticTexts["검색 결과 1개"].exists)
         shot("17-search-notes")

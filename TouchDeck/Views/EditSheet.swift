@@ -20,7 +20,6 @@ struct EditSheet: View {
     @State private var command = ""
     @State private var directory = ""
     @State private var search = ""
-    @FocusState private var searchFocused: Bool
 
     var body: some View {
         NavigationStack {
@@ -33,7 +32,7 @@ struct EditSheet: View {
 
                 // 앱을 고를 때는 검색창을 목록 밖 맨 위에 고정한다. 목록을 내려도 사라지지 않게
                 if kind == .app {
-                    AppSearchField(text: $search, focused: $searchFocused, onSubmit: selectIfSingleResult)
+                    AppSearchField(text: $search, onSubmit: selectIfSingleResult)
                         .padding(.horizontal)
                 }
 
@@ -56,11 +55,8 @@ struct EditSheet: View {
                 }
             }
         }
-        .onAppear {
-            load()
-            // 새 앱 버튼을 추가할 때는 바로 검색부터 칠 수 있게
-            if target.button == nil && kind == .app { searchFocused = true }
-        }
+        // 검색창은 직접 누를 때만 커서가 간다. 열자마자 키보드가 올라와 목록을 가리지 않게
+        .onAppear(perform: load)
         .preferredColorScheme(.dark)
     }
 
