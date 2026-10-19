@@ -5,6 +5,7 @@ import UIKit
 /// 맥 화면 전체 보기. 탭=클릭, 두 손가락 탭=우클릭, 한 손가락 쓸기=스크롤,
 /// 두 손가락 쓸기=원래 크기면 스크롤, 확대 중이면 보는 위치 옮기기,
 /// 길게 눌렀다 끌기=드래그(블록 선택, 창 옮기기), 핀치=이 화면만 확대.
+/// 키보드 버튼을 누르면 아래에 입력칸이 열리고, 맥 화면은 키보드 위 남은 자리로 줄어든다.
 struct ScreenViewer: View {
     let client: DeckClient
     let display: DisplayInfo
@@ -13,6 +14,8 @@ struct ScreenViewer: View {
 
     @State private var zoom: CGFloat = 1
     @State private var offset: CGSize = .zero
+    @State private var showInput = false
+    @State private var showUpdateNotice = false
     @Environment(\.scenePhase) private var scenePhase
     /// 아이폰 세로처럼 좁으면 툴바 버튼은 아이콘만 (글자까지 넣으면 화면 밖으로 넘친다)
     @Environment(\.horizontalSizeClass) private var sizeClass
@@ -22,12 +25,46 @@ struct ScreenViewer: View {
     }
 
     var body: some View {
+        // 바깥 VStack은 키보드 자리를 비워 둔다. 입력칸이 열리면 영상은 키보드와 입력칸 위로 줄어든다
+        VStack(spacing: 0) {
+            content
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                // 영상만 화면 끝까지 (툴바와 입력칸은 안전 영역 안에 둔다)
+                .ignoresSafeArea(.container)
+                // 입력칸이 열려 영상 자리가 줄면 보는 위치를 새 크기 안으로 맞춘다
+                .onGeometryChange(for: CGSize.self) { $0.size } action: { size in
+                    offset = ScreenGeometry.clampOffset(offset, zoom: zoom, view: size)
+                }
+                .overlay(alignment: .bottom) { inputBanner }
+            if showInput && stream != nil {
+                RemoteInputBar(client: client)
+            }
+        }
+        .overlay(alignment: .topTrailing) { toolbar }
+        .background(Color.black.ignoresSafeArea())
+        .alert("맥 TouchDeck을 새 버전으로 설치해 주세요", isPresented: $showUpdateNotice) {
+            Button("확인", role: .cancel) {}
+        } message: {
+            Text("맥 앱이 예전 버전이라 글자 입력을 받지 못해요.")
+        }
+        .statusBarHidden()
+        .persistentSystemOverlays(.hidden)
+        // 앱이 뒤로 가면 맥에서 찍기를 멈추고, 돌아오면 같은 모니터로 다시 시작한다
+        .onChange(of: scenePhase) { _, phase in
+            switch phase {
+            case .background: client.stopScreen()
+            case .active: if client.screenStream == nil { client.startScreen(display.id) }
+            default: break
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var content: some View {
         ZStack {
-            Color.black.ignoresSafeArea()
             if let stream {
                 VideoSurface(client: client, video: CGSize(width: stream.width, height: stream.height),
                              macWidth: CGFloat(display.width), zoom: $zoom, offset: $offset)
-                    .ignoresSafeArea()
             } else if let notice = client.screenNotice, let text = ScreenPickerView.text(for: notice) {
                 Label(text, systemImage: "exclamationmark.circle.fill")
                     .font(.callout.weight(.medium))
@@ -37,18 +74,6 @@ struct ScreenViewer: View {
                 ProgressView("\(display.name) 화면을 불러오는 중")
                     .tint(DeckTheme.legend)
                     .foregroundStyle(DeckTheme.legendDim)
-            }
-        }
-        .overlay(alignment: .topTrailing) { toolbar }
-        .overlay(alignment: .bottom) { inputBanner }
-        .statusBarHidden()
-        .persistentSystemOverlays(.hidden)
-        // 앱이 뒤로 가면 맥에서 찍기를 멈추고, 돌아오면 같은 모니터로 다시 시작한다
-        .onChange(of: scenePhase) { _, phase in
-            switch phase {
-            case .background: client.stopScreen()
-            case .active: if client.screenStream == nil { client.startScreen(display.id) }
-            default: break
             }
         }
     }
@@ -76,6 +101,10 @@ struct ScreenViewer: View {
                        systemImage: client.screenAudio ? "speaker.wave.2.fill" : "speaker.slash.fill") {
                 client.setScreenOptions(fps: client.screenFPS, audio: !client.screenAudio)
             }
+            toolButton(showInput ? "키보드 닫기" : "키보드", systemImage: showInput ? "keyboard.chevron.compact.down" : "keyboard") {
+                if client.canTypeRemotely { showInput.toggle() } else { showUpdateNotice = true }
+            }
+            .opacity(client.canTypeRemotely ? 1 : 0.45)
             toolButton("닫기", systemImage: "xmark", action: onClose)
         }
         .padding(6)

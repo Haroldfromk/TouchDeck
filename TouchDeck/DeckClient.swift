@@ -145,6 +145,24 @@ final class DeckClient {
     /// 숫자 키패드. 맥에서 앞에 떠 있는 앱에 이 키를 누른 것처럼 입력된다. 친 키는 기억하지 않는다.
     func typeKey(_ key: TypedKey) { send(.typeKey(key)) }
 
+    /// 맥 앱이 글자 입력을 아는 버전인지 (기능 번호 2부터)
+    var canTypeRemotely: Bool { (macProtocol ?? DeckProtocol.legacy) >= DeckProtocol.current }
+    /// 맥 앱이 이 기기 앱보다 예전 버전이다
+    var macNeedsUpdate: Bool { macProtocol.map { $0 < DeckProtocol.current } ?? false }
+
+    /// 보기 화면 입력칸의 글. 비어 있으면 thenEnter일 때 엔터만 보낸다
+    func typeText(_ text: String, thenEnter: Bool) {
+        guard screenStream != nil else { return }
+        let cleaned = TextInput.clean(text)
+        if !cleaned.isEmpty { send(.typeText(text: cleaned)) }
+        if thenEnter { send(.pressKey(.enter)) }
+    }
+
+    func pressKey(_ key: RemoteKey) {
+        guard screenStream != nil else { return }
+        send(.pressKey(key))
+    }
+
     /// 폴더 고르기: 맥에 이 폴더의 하위 폴더 목록을 묻는다. 답은 folderListing으로 온다
     func listFolder(_ path: String) { send(.listFolder(path: path)) }
 

@@ -31,7 +31,14 @@ struct DeckView: View {
             let landscape = geo.size.width > geo.size.height
             VStack(spacing: 14) {
                 HStack(spacing: 16) {
-                    ConnectionStatusView(phase: client.phase, route: client.route)
+                    VStack(alignment: .leading, spacing: 4) {
+                        ConnectionStatusView(phase: client.phase, route: client.route)
+                        if client.macNeedsUpdate {
+                            Label("맥 TouchDeck을 새 버전으로 설치해 주세요", systemImage: "arrow.down.circle")
+                                .font(.caption.weight(.medium))
+                                .foregroundStyle(DeckTheme.legendDim)
+                        }
+                    }
                     Picker("화면", selection: $screen) {
                         ForEach(Screen.allCases, id: \.self) { Text($0.rawValue).tag($0) }
                     }
