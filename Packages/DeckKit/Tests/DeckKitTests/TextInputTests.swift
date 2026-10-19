@@ -5,7 +5,7 @@ import Testing
 // MARK: - 글자 입력 메시지
 
 @Test func typeTextAndPressKeyRoundTrip() throws {
-    for m: ClientMessage in [.typeText(text: "검색어 abc"), .pressKey(.shiftTab), .pressKey(.controlC)] {
+    for m: ClientMessage in [.typeText(text: "검색어 abc"), .pressKey(.shiftTab), .pressKey(.controlC), .pressKey(.selectAll)] {
         #expect(try ClientMessage.decode(m.encoded()) == m)
     }
 }

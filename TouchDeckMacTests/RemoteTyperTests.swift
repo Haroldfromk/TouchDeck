@@ -11,6 +11,8 @@ import Testing
     #expect(RemoteKeys.stroke(for: .escape) == (CGKeyCode(kVK_Escape), []))
     #expect(RemoteKeys.stroke(for: .enter) == (CGKeyCode(kVK_Return), []))
     #expect(RemoteKeys.stroke(for: .up) == (CGKeyCode(kVK_UpArrow), []))
+    // 남아 있는 검색어를 한 번에 고르려고
+    #expect(RemoteKeys.stroke(for: .selectAll) == (CGKeyCode(kVK_ANSI_A), .maskCommand))
 }
 
 @Test func typesInArrivalOrder() {

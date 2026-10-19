@@ -9,10 +9,12 @@ struct RemoteInputBar: View {
     @AppStorage("screen.sendEnter") private var sendEnter = true
     @FocusState private var focused: Bool
 
-    private struct KeyItem {
+    fileprivate struct KeyItem {
         let key: RemoteKey
         let label: String
         let spoken: String
+        /// 길게 누르면 뗄 때까지 계속 보낸다 (⌫)
+        var repeats = false
     }
 
     private static let keys: [KeyItem] = [
@@ -23,7 +25,8 @@ struct RemoteInputBar: View {
         KeyItem(key: .down, label: "↓", spoken: "아래"),
         KeyItem(key: .left, label: "←", spoken: "왼쪽"),
         KeyItem(key: .right, label: "→", spoken: "오른쪽"),
-        KeyItem(key: .delete, label: "⌫", spoken: "지우기"),
+        KeyItem(key: .selectAll, label: "⌘A", spoken: "전체 선택"),
+        KeyItem(key: .delete, label: "⌫", spoken: "지우기", repeats: true),
         KeyItem(key: .controlC, label: "⌃C", spoken: "컨트롤 C"),
         KeyItem(key: .enter, label: "⏎", spoken: "엔터"),
     ]
@@ -33,16 +36,7 @@ struct RemoteInputBar: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 6) {
                     ForEach(Self.keys, id: \.key) { item in
-                        Button { client.pressKey(item.key) } label: {
-                            Text(item.label)
-                                .font(.callout.weight(.semibold).monospaced())
-                                .frame(minWidth: 44, minHeight: 36)
-                                .padding(.horizontal, 6)
-                                .background(DeckTheme.socket, in: .rect(cornerRadius: 8))
-                        }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(DeckTheme.legend)
-                        .accessibilityLabel(item.spoken)
+                        KeyButton(item: item) { client.pressKey(item.key) }
                     }
                 }
             }
@@ -82,5 +76,58 @@ struct RemoteInputBar: View {
         client.typeText(text, thenEnter: sendEnter)
         text = ""
         focused = true
+    }
+}
+
+/// 특수 키 버튼 하나. ⌫는 맥 키보드처럼 0.4초 누르고 있으면 뗄 때까지 연달아 지운다
+private struct KeyButton: View {
+    let item: RemoteInputBar.KeyItem
+    let send: () -> Void
+    /// 누르는 중. 손을 떼거나 스크롤에 손가락을 뺏기면 저절로 false가 돼서, 지우기가 멈추지 않는 일이 없다
+    @GestureState private var pressing = false
+    @State private var repeater: Task<Void, Never>?
+
+    var body: some View {
+        if item.repeats {
+            label
+                .gesture(DragGesture(minimumDistance: 0).updating($pressing) { _, state, _ in state = true })
+                .onChange(of: pressing) { _, now in now ? startRepeating() : stopRepeating() }
+                .onDisappear { stopRepeating() }
+                .accessibilityLabel(item.spoken)
+                .accessibilityAddTraits(.isButton)
+                .accessibilityAction { send() }
+        } else {
+            Button(action: send) { label }
+                .buttonStyle(.plain)
+                .accessibilityLabel(item.spoken)
+        }
+    }
+
+    private var label: some View {
+        Text(item.label)
+            .font(.callout.weight(.semibold).monospaced())
+            .frame(minWidth: 44, minHeight: 36)
+            .padding(.horizontal, 6)
+            .background(DeckTheme.socket.opacity(pressing ? 0.6 : 1), in: .rect(cornerRadius: 8))
+            .foregroundStyle(DeckTheme.legend)
+            .contentShape(.rect)
+    }
+
+    /// 누르자마자 한 번, 0.4초 뒤부터 0.08초마다
+    private func startRepeating() {
+        guard repeater == nil else { return }
+        send()
+        repeater = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(0.4))
+            while !Task.isCancelled {
+                send()
+                try? await Task.sleep(for: .seconds(0.08))
+            }
+        }
+    }
+
+    private func stopRepeating() {
+        repeater?.cancel()
+        repeater = nil
     }
 }

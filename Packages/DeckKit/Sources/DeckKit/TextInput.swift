@@ -1,6 +1,7 @@
-/// 맥 화면을 보면서 보내는 특수 키. 클로드 코드 터미널에서 자주 쓰는 것만.
+/// 맥 화면을 보면서 보내는 특수 키. 클로드 코드 터미널에서 자주 쓰는 것과,
+/// 검색창에 남은 글을 한 번에 고르는 전체 선택(⌘A).
 public enum RemoteKey: String, Codable, CaseIterable, Sendable {
-    case escape, tab, shiftTab, up, down, left, right, delete, enter, controlC
+    case escape, tab, shiftTab, up, down, left, right, delete, enter, controlC, selectAll
 }
 
 /// 입력칸에 쓴 글을 맥으로 보내기 전에 다듬고 나눈다. 아이패드와 맥 양쪽에서 같은 규칙을 쓴다.

@@ -17,6 +17,7 @@ enum RemoteKeys {
         case .delete: (CGKeyCode(kVK_Delete), [])
         case .enter: (CGKeyCode(kVK_Return), [])
         case .controlC: (CGKeyCode(kVK_ANSI_C), .maskControl)
+        case .selectAll: (CGKeyCode(kVK_ANSI_A), .maskCommand)
         }
     }
 }
