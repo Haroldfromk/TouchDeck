@@ -16,6 +16,13 @@ public enum AlacrittyCommand {
         return args
     }
 
+    /// 명령 이름이 zsh에서 찾아지는지(별칭/함수/명령) 확인하는 스크립트.
+    /// `zsh -ic '…' zsh 이름`처럼 위치 인자를 붙이면 해롤드의 ~/.zshrc 환경에서는 스크립트가
+    /// 아예 실행되지 않았다. 그래서 이름을 작은따옴표로 감싸 스크립트 안에 직접 넣는다.
+    public static func lookupScript(for name: String) -> String {
+        "whence -- '\(name.replacingOccurrences(of: "'", with: #"'\''"#))' >/dev/null"
+    }
+
     public static func firstWord(of command: String) -> String? {
         command.split(whereSeparator: \.isWhitespace).first.map(String.init)
     }

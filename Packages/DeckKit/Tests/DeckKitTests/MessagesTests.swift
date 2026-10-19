@@ -32,7 +32,8 @@ import Testing
         .authorized, .unauthorized, .apps([AppInfo(name: "Xcode", bundleId: "com.apple.dt.Xcode", icon: "AAA")]),
         .pressResult(page: 0, index: 1, ok: false, message: "폴더 없음: /x"),
         .pressResult(page: 0, index: 1, ok: true, message: nil),
-        .volume(value: 30, muted: true),
+        .volume(value: 30, muted: true, available: true),
+        .volume(value: 0, muted: false, available: false),
     ]
     for m in all { #expect(try ServerMessage.decode(m.encoded()) == m) }
 }
@@ -47,4 +48,8 @@ import Testing
 
 @Test func unknownTypeThrows() {
     #expect(throws: (any Error).self) { try ClientMessage.decode(#"{"type":"nope"}"#) }
+}
+
+@Test func volumeWithoutAvailableKeyMeansAvailable() throws {
+    #expect(try ServerMessage.decode(#"{"type":"volume","value":40,"muted":false}"#) == .volume(value: 40, muted: false, available: true))
 }

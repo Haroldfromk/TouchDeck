@@ -23,3 +23,8 @@ import Testing
     #expect(AlacrittyCommand.firstWord(of: "  blogrun --x") == "blogrun")
     #expect(AlacrittyCommand.firstWord(of: "   ") == nil)
 }
+
+@Test func lookupScriptQuotesName() {
+    #expect(AlacrittyCommand.lookupScript(for: "blogrun") == "whence -- 'blogrun' >/dev/null")
+    #expect(AlacrittyCommand.lookupScript(for: "it's") == #"whence -- 'it'\''s' >/dev/null"#)
+}

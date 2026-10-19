@@ -36,13 +36,14 @@ public enum ServerMessage: Equatable, Sendable {
     case layout(DeckLayout)
     case apps([AppInfo])
     case pressResult(page: Int, index: Int, ok: Bool, message: String?)
-    case volume(value: Int, muted: Bool)
+    /// available == false: 지금 출력 장치(예: DisplayPort 모니터)는 소리 크기를 바꿀 수 없다.
+    case volume(value: Int, muted: Bool, available: Bool)
 }
 
 /// 모든 메시지가 쓰는 JSON 키. 최상위 `type`으로 종류를 나눈다.
 private enum Key: String, CodingKey {
     case type, deviceId, deviceName, code, signature, page, index, button, value
-    case remaining, token, nonce, pages, items, ok, message, muted
+    case remaining, token, nonce, pages, items, ok, message, muted, available
 }
 
 extension ClientMessage: Codable {
@@ -122,7 +123,8 @@ extension ServerMessage: Codable {
                                 ok: try c.decode(Bool.self, forKey: .ok),
                                 message: try c.decodeIfPresent(String.self, forKey: .message))
         case "volume":
-            self = .volume(value: try c.decode(Int.self, forKey: .value), muted: try c.decode(Bool.self, forKey: .muted))
+            self = .volume(value: try c.decode(Int.self, forKey: .value), muted: try c.decode(Bool.self, forKey: .muted),
+                           available: try c.decodeIfPresent(Bool.self, forKey: .available) ?? true)
         case let other:
             throw DecodingError.dataCorruptedError(forKey: .type, in: c, debugDescription: "unknown type \(other)")
         }
@@ -158,10 +160,11 @@ extension ServerMessage: Codable {
             try c.encode(index, forKey: .index)
             try c.encode(ok, forKey: .ok)
             try c.encodeIfPresent(message, forKey: .message)
-        case .volume(let value, let muted):
+        case .volume(let value, let muted, let available):
             try c.encode("volume", forKey: .type)
             try c.encode(value, forKey: .value)
             try c.encode(muted, forKey: .muted)
+            try c.encode(available, forKey: .available)
         }
     }
 }

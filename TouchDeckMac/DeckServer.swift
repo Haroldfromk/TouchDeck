@@ -8,7 +8,7 @@ import Observation
 protocol DeckActions {
     func run(_ action: ButtonAction) async -> (ok: Bool, message: String?)
     func apps() async -> [AppInfo]
-    func volume() async -> (value: Int, muted: Bool)
+    func volume() async -> (value: Int, muted: Bool, available: Bool)
     func setVolume(_ value: Int) async
 }
 
@@ -178,7 +178,7 @@ final class DeckServer {
         refreshDevices()
         Task {
             let volume = await actions.volume()
-            session.send(.volume(value: volume.value, muted: volume.muted))
+            session.send(.volume(value: volume.value, muted: volume.muted, available: volume.available))
             session.send(.apps(await actions.apps()))
         }
     }
@@ -211,7 +211,7 @@ final class DeckServer {
             Task {
                 await actions.setVolume(value)
                 let volume = await actions.volume()
-                broadcast(.volume(value: volume.value, muted: volume.muted))
+                broadcast(.volume(value: volume.value, muted: volume.muted, available: volume.available))
             }
 
         case .hello, .pair, .auth:
