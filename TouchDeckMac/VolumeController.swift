@@ -52,6 +52,32 @@ enum VolumeController {
         }
     }
 
+    /// 지금 소리가 나가는 길과 음소거 상태. 화면 보기 중 맥 스피커를 끌 때 쓴다
+    static func currentOutput() -> (source: Source, muted: Bool) {
+        let system = parse(osascript("get volume settings") ?? "")
+        let source = source(systemAvailable: system.available)
+        switch source {
+        case .system:
+            return (source, system.muted)
+        case .betterDisplay(let name):
+            let muted = betterDisplay(["get", "-name=\(name)", "-mute"])?.trimmingCharacters(in: .whitespacesAndNewlines) == "on"
+            return (source, muted)
+        case .none:
+            return (source, false)
+        }
+    }
+
+    /// 기록해 둔 길로 음소거를 켜고 끈다
+    static func setMuted(_ muted: Bool, on record: SpeakerMute.Record) {
+        switch record.kind {
+        case .system:
+            _ = osascript(muted ? "set volume with output muted" : "set volume without output muted")
+        case .betterDisplay:
+            guard let name = record.name else { return }
+            _ = betterDisplay(["set", "-name=\(name)", "-mute=\(muted ? "on" : "off")"])
+        }
+    }
+
     // MARK: - 판단 (테스트 대상)
 
     static func chooseSource(systemAvailable: Bool, outputName: String?, betterDisplayRunning: Bool) -> Source {
