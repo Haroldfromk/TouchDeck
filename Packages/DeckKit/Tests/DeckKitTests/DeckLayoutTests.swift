@@ -41,3 +41,17 @@ import Testing
     let obj = try JSONSerialization.jsonObject(with: data) as! [String: String]
     #expect(obj == ["kind": "terminal"])
 }
+
+@Test func commandKeepOpenRoundTrip() throws {
+    let action = ButtonAction.command(command: "uploadimg", directory: nil, keepOpen: false)
+    let data = try JSONEncoder().encode(action)
+    let obj = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+    #expect(obj["keepOpen"] as? Bool == false)
+    #expect(try JSONDecoder().decode(ButtonAction.self, from: data) == action)
+}
+
+@Test func oldCommandWithoutKeepOpenStaysOpen() throws {
+    // 이 값이 생기기 전에 저장된 버튼은 지금처럼 창을 유지한다
+    let old = Data(#"{"kind":"command","command":"blogrun"}"#.utf8)
+    #expect(try JSONDecoder().decode(ButtonAction.self, from: old) == .command(command: "blogrun", directory: nil, keepOpen: true))
+}

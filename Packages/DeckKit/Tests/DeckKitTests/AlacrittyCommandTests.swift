@@ -70,3 +70,14 @@ func preflightSkipsWhatItCannotParse(_ command: String) {
     #expect(AlacrittyCommand.lookupScript(for: "blogrun") == "whence -- 'blogrun' >/dev/null")
     #expect(AlacrittyCommand.lookupScript(for: "it's") == #"whence -- 'it'\''s' >/dev/null"#)
 }
+
+@Test func closeWhenDoneDropsTrailingShell() {
+    // 금방 끝나는 명령(uploadimg 등)은 끝나면 창이 닫히게: 뒤에 exec zsh를 붙이지 않는다
+    let args = AlacrittyCommand.openArguments(command: "uploadimg", directory: "/tmp", keepOpen: false)
+    #expect(args.last == "eval 'uploadimg'")
+}
+
+@Test func keepOpenIsDefault() {
+    #expect(AlacrittyCommand.openArguments(command: "blogrun", directory: "/tmp")
+            == AlacrittyCommand.openArguments(command: "blogrun", directory: "/tmp", keepOpen: true))
+}

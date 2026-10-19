@@ -9,11 +9,13 @@ public enum AlacrittyCommand {
     ///   끝나도 창이 닫히지 않게 `exec zsh`로 셸을 이어 둔다.
     ///   명령은 작은따옴표로 감싸 `eval`에 넘긴다. 명령 끝의 `# 주석`이나 안 닫힌 따옴표가
     ///   뒤의 `exec zsh`까지 삼키면 명령이 끝나자마자 창이 닫히기 때문이다.
-    public static func openArguments(command: String?, directory: String?) -> [String] {
+    /// keepOpen == false면 명령이 끝날 때 창도 닫힌다 (뒤에 exec zsh를 붙이지 않는다)
+    public static func openArguments(command: String?, directory: String?, keepOpen: Bool = true) -> [String] {
         let dir = directory.map(expandTilde) ?? NSHomeDirectory()
         var args = ["-na", appPath, "--args", "--working-directory", dir]
         if let command {
-            args += ["-e", "/bin/zsh", "-ic", "eval \(singleQuoted(command)); exec zsh"]
+            let script = "eval \(singleQuoted(command))"
+            args += ["-e", "/bin/zsh", "-ic", keepOpen ? "\(script); exec zsh" : script]
         }
         return args
     }

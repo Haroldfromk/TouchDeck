@@ -103,3 +103,11 @@ func processTimesOut() throws {
 }
 
 final class Captured: @unchecked Sendable { var args: [String] = [] }
+
+@Test func closeWhenDonePassesThrough() async {
+    let captured = Captured()
+    var r = ActionRunner.fake()
+    r.runOpen = { captured.args = $0 }
+    _ = await r.run(.command(command: "uploadimg", directory: "/tmp", keepOpen: false))
+    #expect(captured.args.last == "eval 'uploadimg'")
+}

@@ -85,7 +85,7 @@ struct ButtonTile: View {
                 Text(button.label)
                     .font(DeckTheme.legendFont(size: side * 0.12))
                     .foregroundStyle(DeckTheme.legend)
-            case .command(let command, _):
+            case .command(let command, _, _):
                 Image(systemName: "apple.terminal")
                     .font(.system(size: side * 0.2, weight: .medium))
                     .foregroundStyle(DeckTheme.command)

@@ -26,7 +26,7 @@ struct ActionRunner: Sendable {
                 return (false, "앱을 찾을 수 없음: \(bundleId)")
             }
 
-        case .command(let command, let directory):
+        case .command(let command, let directory, let keepOpen):
             let check = AlacrittyCommand.preflight(command: command, directory: directory)
             if check == .empty { return (false, "명령이 비어 있음") }
             if let failure = checkTerminal(directory: directory) { return failure }
@@ -38,7 +38,7 @@ struct ActionRunner: Sendable {
             case .empty, .skip:
                 break
             }
-            return launch(AlacrittyCommand.openArguments(command: command, directory: directory))
+            return launch(AlacrittyCommand.openArguments(command: command, directory: directory, keepOpen: keepOpen))
 
         case .terminal(let directory):
             if let failure = checkTerminal(directory: directory) { return failure }

@@ -19,6 +19,7 @@ struct EditSheet: View {
     @State private var bundleId: String?
     @State private var command = ""
     @State private var directory = ""
+    @State private var closeWhenDone = false
     @State private var search = ""
 
     var body: some View {
@@ -141,8 +142,11 @@ struct EditSheet: View {
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
             folderField("실행할 폴더 (비우면 홈 폴더)")
+            Toggle("명령이 끝나면 창 닫기", isOn: $closeWhenDone)
         } footer: {
-            Text("맥에서 Alacritty 새 창이 열리고, 평소 쓰는 zsh에서 이 명령이 실행돼요. ~/.zshrc의 별칭도 그대로 쓸 수 있어요. 끝나도 창은 남아 있어요.")
+            Text(closeWhenDone
+                 ? "맥에서 Alacritty 새 창이 열리고 이 명령이 실행돼요. 끝나면 창이 저절로 닫혀요. 오류가 나도 바로 닫히니, 결과를 봐야 하는 명령은 끄세요."
+                 : "맥에서 Alacritty 새 창이 열리고, 평소 쓰는 zsh에서 이 명령이 실행돼요. ~/.zshrc의 별칭도 그대로 쓸 수 있어요. 끝나도 창이 남아서 서버(npm run dev 등)를 띄워 두기 좋아요.")
         }
     }
 
@@ -183,10 +187,11 @@ struct EditSheet: View {
         case .app(let id):
             kind = .app
             bundleId = id
-        case .command(let cmd, let dir):
+        case .command(let cmd, let dir, let keepOpen):
             kind = .command
             command = cmd
             directory = dir ?? ""
+            closeWhenDone = !keepOpen
         case .terminal(let dir):
             kind = .terminal
             directory = dir ?? ""
@@ -205,7 +210,7 @@ struct EditSheet: View {
             let cmd = command.trimmingCharacters(in: .whitespaces)
             guard !cmd.isEmpty else { return nil }
             return DeckButton(label: trimmedLabel.isEmpty ? cmd : trimmedLabel,
-                              action: .command(command: cmd, directory: dir.isEmpty ? nil : dir))
+                              action: .command(command: cmd, directory: dir.isEmpty ? nil : dir, keepOpen: !closeWhenDone))
         case .terminal:
             return DeckButton(label: trimmedLabel.isEmpty ? "새 터미널" : trimmedLabel,
                               action: .terminal(directory: dir.isEmpty ? nil : dir))

@@ -3,11 +3,12 @@ import Foundation
 /// 버튼을 눌렀을 때 맥이 할 일.
 public enum ButtonAction: Codable, Equatable, Hashable, Sendable {
     case app(bundleId: String)
-    case command(command: String, directory: String?)
+    /// keepOpen: 명령이 끝나도 창을 남길지. 서버(npm run dev 등)는 true, 금방 끝나는 명령은 false로 창이 닫힌다
+    case command(command: String, directory: String?, keepOpen: Bool = true)
     case terminal(directory: String?)
 
     private enum CodingKeys: String, CodingKey {
-        case kind, bundleId, command, directory
+        case kind, bundleId, command, directory, keepOpen
     }
 
     public init(from decoder: Decoder) throws {
@@ -16,8 +17,10 @@ public enum ButtonAction: Codable, Equatable, Hashable, Sendable {
         case "app":
             self = .app(bundleId: try c.decode(String.self, forKey: .bundleId))
         case "command":
+            // 이 값이 생기기 전에 저장된 버튼은 창 유지
             self = .command(command: try c.decode(String.self, forKey: .command),
-                            directory: try c.decodeIfPresent(String.self, forKey: .directory))
+                            directory: try c.decodeIfPresent(String.self, forKey: .directory),
+                            keepOpen: try c.decodeIfPresent(Bool.self, forKey: .keepOpen) ?? true)
         case "terminal":
             self = .terminal(directory: try c.decodeIfPresent(String.self, forKey: .directory))
         case let other:
@@ -31,10 +34,12 @@ public enum ButtonAction: Codable, Equatable, Hashable, Sendable {
         case .app(let bundleId):
             try c.encode("app", forKey: .kind)
             try c.encode(bundleId, forKey: .bundleId)
-        case .command(let command, let directory):
+        case .command(let command, let directory, let keepOpen):
             try c.encode("command", forKey: .kind)
             try c.encode(command, forKey: .command)
             try c.encodeIfPresent(directory, forKey: .directory)
+            // 기본(창 유지)이면 적지 않는다. 예전 버튼과 저장 모양이 같게
+            if !keepOpen { try c.encode(false, forKey: .keepOpen) }
         case .terminal(let directory):
             try c.encode("terminal", forKey: .kind)
             try c.encodeIfPresent(directory, forKey: .directory)
