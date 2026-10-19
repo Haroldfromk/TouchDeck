@@ -36,6 +36,8 @@ final class AudioPlayer {
         guard running else { return }
         let frames = packet.samples.count / packet.channels
         guard frames > 0 else { return }
+        // 전화 같은 끼어들기로 엔진이 멈췄으면 다시 잇는다 (멈춘 엔진에서 play()를 부르면 앱이 죽는다)
+        if !engine.isRunning { format = nil }
         if format?.sampleRate != Double(packet.sampleRate) || format?.channelCount != AVAudioChannelCount(packet.channels) {
             connect(sampleRate: packet.sampleRate, channels: packet.channels)
         }
@@ -81,6 +83,8 @@ final class AudioPlayer {
         }
         engine.disconnectNodeOutput(player)
         engine.connect(player, to: engine.mainMixerNode, format: made)
+        // 끼어들기가 끝난 뒤에는 세션도 꺼져 있을 수 있다
+        try? AVAudioSession.sharedInstance().setActive(true)
         do {
             try engine.start()
             format = made
