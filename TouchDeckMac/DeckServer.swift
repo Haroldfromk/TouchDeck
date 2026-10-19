@@ -118,6 +118,9 @@ final class DeckServer {
                 }
             }
         }
+        for old in PreAuthLimits.toDrop(pending: sessions.filter { $0.stage != .authorized }) {
+            old.channel.cancel()
+        }
         sessions.append(session)
         channel.start(queue: .main)
         print("[server] new connection", connection.endpoint)
@@ -157,6 +160,11 @@ final class DeckServer {
             return
         }
 
+        guard PreAuthLimits.allows(text) else {
+            print("[server] too big before authorization:", text.utf8.count)
+            session.channel.cancel()
+            return
+        }
         guard let message = try? ClientMessage.decode(text) else {
             print("[server] bad message:", text.prefix(200))
             return
@@ -165,6 +173,8 @@ final class DeckServer {
 
         switch (session.stage, message) {
         case (_, .hello(let deviceId, let deviceName, let clientNonce)):
+            // 이름은 상대가 정한다. 메뉴에 보이는 페어링 대기/연결/허락 목록 모두 이 이름을 쓰니 여기서 자른다
+            let deviceName = PreAuthLimits.displayName(deviceName)
             session.deviceId = deviceId
             session.deviceName = deviceName
             session.clientNonce = clientNonce
