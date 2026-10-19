@@ -23,12 +23,16 @@ enum VolumeController {
         case .system:
             return system
         case .betterDisplay(let name):
-            guard let value = betterDisplay(["get", "-name=\(name)", "-volume"]).flatMap(parseBetterDisplayVolume) else {
+            let raw = betterDisplay(["get", "-name=\(name)", "-volume"])
+            guard let value = raw.flatMap(parseBetterDisplayVolume) else {
+                // 게이지가 가끔 끄는 띠로 바뀌던 원인을 찾으려고 어디서 실패했는지 남긴다
+                print("[volume] BetterDisplay read failed for \(name):", raw.map { "output \($0.prefix(60))" } ?? "process failed")
                 return (0, false, false)
             }
             let muted = betterDisplay(["get", "-name=\(name)", "-mute"])?.trimmingCharacters(in: .whitespacesAndNewlines) == "on"
             return (value, muted, true)
         case .none:
+            print("[volume] no source: system unavailable, output \(defaultOutputName() ?? "nil")")
             return (0, false, false)
         }
     }

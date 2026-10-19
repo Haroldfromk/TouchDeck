@@ -61,9 +61,12 @@ final class LiveActions: DeckActions {
         return apps
     }
 
+    private var volumeStabilizer = VolumeStabilizer()
+
     func volume() async -> (value: Int, muted: Bool, available: Bool, keysAllowed: Bool) {
-        let v = await Task.detached { VolumeController.get() }.value
-        return (v.value, v.muted, v.available, MediaKey.allowed)
+        let (v, output) = await Task.detached { (VolumeController.get(), VolumeController.defaultOutputName()) }.value
+        let r = volumeStabilizer.stabilize(.init(value: v.value, muted: v.muted, available: v.available), output: output, now: .now)
+        return (r.value, r.muted, r.available, MediaKey.allowed)
     }
 
     func pressVolumeKey(_ key: VolumeKey) async -> Bool {
