@@ -22,6 +22,7 @@ final class DeckServer {
     private(set) var status = "멈춤"
     private(set) var pairingCode: String?
     private(set) var pairingDeviceName: String?
+    private(set) var isPairingLocked = false
     private(set) var connectedDevices: [String] = []
     private(set) var trusted: [TrustedDevice] = []
 
@@ -57,6 +58,15 @@ final class DeckServer {
         } catch {
             status = "시작 실패: \(error)"
             print("[server] start failed:", error)
+        }
+    }
+
+    /// 맥 메뉴의 "새 기기 허락 다시 받기". 가장 최근에 기다리던 기기에게 새 숫자를 준다.
+    func unlockPairing() {
+        authority.unlock()
+        isPairingLocked = false
+        if let session = sessions.last(where: { $0.stage == .awaitingPairing }), let deviceId = session.deviceId {
+            beginPairing(session, deviceId: deviceId, deviceName: session.deviceName ?? "새 기기")
         }
     }
 
@@ -158,9 +168,11 @@ final class DeckServer {
                 authorize(session)
             case .wrong(let remaining):
                 session.send(.pairingFailed(remaining: remaining))
-            case .regenerated(let newCode):
-                pairingCode = newCode
-                session.send(.pairingFailed(remaining: PairingAuthority.maxAttempts))
+            case .locked:
+                lockPairing(session)
+            case .notPending:
+                // 그 사이 다른 기기가 숫자를 받아 갔다. 이 기기에게 다시 새 숫자를 준다.
+                beginPairing(session, deviceId: deviceId, deviceName: session.deviceName ?? "새 기기")
             }
 
         case (.authorized, _):
@@ -172,10 +184,22 @@ final class DeckServer {
     }
 
     private func beginPairing(_ session: ClientSession, deviceId: String, deviceName: String) {
-        pairingCode = authority.beginPairing(deviceId: deviceId, deviceName: deviceName)
-        pairingDeviceName = deviceName
         session.stage = .awaitingPairing
+        guard let code = authority.beginPairing(deviceId: deviceId, deviceName: deviceName) else {
+            lockPairing(session)
+            return
+        }
+        pairingCode = code
+        pairingDeviceName = deviceName
         session.send(.needPairing)
+    }
+
+    /// 틀린 횟수를 다 썼다. 해롤드가 메뉴에서 풀기 전까지 어떤 기기도 숫자를 받을 수 없다.
+    private func lockPairing(_ session: ClientSession) {
+        isPairingLocked = true
+        pairingCode = nil
+        pairingDeviceName = nil
+        session.send(.pairingLocked)
     }
 
     private func authorize(_ session: ClientSession) {

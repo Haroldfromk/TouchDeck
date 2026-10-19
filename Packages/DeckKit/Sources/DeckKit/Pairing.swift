@@ -23,7 +23,10 @@ public struct TrustedDevice: Codable, Equatable, Hashable, Sendable {
 public enum PairingOutcome: Equatable, Sendable {
     case paired(token: String)
     case wrong(remaining: Int)
-    case regenerated(newCode: String)
+    /// 틀린 횟수를 다 써서 잠겼다. 해롤드가 맥 메뉴에서 풀어야 다시 페어링할 수 있다.
+    case locked
+    /// 지금 숫자를 받은 기기가 아니다. 맞춰 보지도 않으니 횟수를 쓰지 않는다.
+    case notPending
 }
 
 /// 맥 쪽의 허락 판정. 네트워크와 저장은 모르고 판단만 한다.
@@ -33,6 +36,8 @@ public struct PairingAuthority: Sendable {
     public private(set) var trusted: [TrustedDevice]
     /// 지금 메뉴바에 보여줄 4자리 숫자. 페어링 중이 아니면 nil.
     public private(set) var currentCode: String?
+    /// 틀린 횟수를 다 쓰면 잠긴다. 인사를 다시 해도 안 풀린다 (숫자 찍어 보기 막기).
+    public private(set) var isLocked = false
 
     private var pendingDevice: (id: String, name: String)?
     private var attemptsLeft = PairingAuthority.maxAttempts
@@ -43,31 +48,41 @@ public struct PairingAuthority: Sendable {
         self.random = random
     }
 
-    public mutating func beginPairing(deviceId: String, deviceName: String) -> String {
+    /// 새 숫자를 만든다. 잠겨 있으면 nil. 틀린 횟수는 기기가 바뀌거나 다시 인사해도 이어진다.
+    public mutating func beginPairing(deviceId: String, deviceName: String) -> String? {
+        guard !isLocked else { return nil }
         pendingDevice = (deviceId, deviceName)
-        attemptsLeft = Self.maxAttempts
         let code = makeCode()
         currentCode = code
         return code
     }
 
     public mutating func submit(code: String, deviceId: String) -> PairingOutcome {
-        if let pending = pendingDevice, pending.id == deviceId, code == currentCode {
+        guard !isLocked else { return .locked }
+        guard let pending = pendingDevice, pending.id == deviceId else { return .notPending }
+        if code == currentCode {
             let token = Self.makeToken()
             trusted.removeAll { $0.id == deviceId }
             trusted.append(TrustedDevice(id: deviceId, name: pending.name, token: token))
             pendingDevice = nil
             currentCode = nil
+            attemptsLeft = Self.maxAttempts
             return .paired(token: token)
         }
         attemptsLeft -= 1
         if attemptsLeft <= 0 {
-            attemptsLeft = Self.maxAttempts
-            let code = makeCode()
-            currentCode = code
-            return .regenerated(newCode: code)
+            isLocked = true
+            pendingDevice = nil
+            currentCode = nil
+            return .locked
         }
         return .wrong(remaining: attemptsLeft)
+    }
+
+    /// 맥 메뉴의 "새 기기 허락 다시 받기"
+    public mutating func unlock() {
+        isLocked = false
+        attemptsLeft = Self.maxAttempts
     }
 
     public func verify(deviceId: String, nonce: String, signature: String) -> Bool {

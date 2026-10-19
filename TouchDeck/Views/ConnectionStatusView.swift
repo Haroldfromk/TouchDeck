@@ -29,6 +29,7 @@ struct ConnectionStatusView: View {
         case .searching: "같은 와이파이에서 맥을 찾는 중 (맥에서 TouchDeck을 켜 두세요)"
         case .connecting(let name): "\(name)에 연결하는 중"
         case .needsPairing(let name), .pairingFailed(let name, _): "\(name)의 허락을 기다리는 중"
+        case .pairingLocked(let name): "\(name)에서 새 기기 허락이 멈춰 있어요"
         case .connected(let name): "\(name)에 연결됨"
         case .localNetworkDenied: "로컬 네트워크 권한이 꺼져 있어요. 설정 > 개인정보 보호 및 보안 > 로컬 네트워크에서 TouchDeck을 켜세요"
         }

@@ -1,3 +1,4 @@
+import DeckKit
 import SwiftUI
 
 /// 메뉴바 아이콘을 누르면 뜨는 작은 창. 편집 화면은 두지 않는다 (편집은 아이패드/아이폰에서).
@@ -21,6 +22,17 @@ struct MenuContent: View {
                 .padding(10)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(.orange.opacity(0.15), in: .rect(cornerRadius: 8))
+            }
+
+            if server.isPairingLocked {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("페어링 숫자가 \(PairingAuthority.maxAttempts)번 틀려서 새 기기 허락을 멈췄어요.")
+                        .font(.caption)
+                    Button("새 기기 허락 다시 받기") { server.unlockPairing() }
+                }
+                .padding(10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(.red.opacity(0.12), in: .rect(cornerRadius: 8))
             }
 
             section("연결된 기기") {

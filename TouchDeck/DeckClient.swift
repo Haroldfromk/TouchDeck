@@ -14,6 +14,7 @@ final class DeckClient {
         case connecting(String)
         case needsPairing(String)
         case pairingFailed(String, remaining: Int)
+        case pairingLocked(String)
         case connected(String)
         case localNetworkDenied
     }
@@ -169,6 +170,8 @@ final class DeckClient {
             phase = .needsPairing(macName)
         case .pairingFailed(let remaining):
             phase = .pairingFailed(macName, remaining: remaining)
+        case .pairingLocked:
+            phase = .pairingLocked(macName)
         case .paired(let token):
             KeychainStore.setToken(token)
         case .challenge(let nonce):

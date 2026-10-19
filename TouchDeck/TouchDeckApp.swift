@@ -19,7 +19,7 @@ struct TouchDeckApp: App {
     private var needsPairing: Binding<Bool> {
         Binding {
             switch client.phase {
-            case .needsPairing, .pairingFailed: true
+            case .needsPairing, .pairingFailed, .pairingLocked: true
             default: false
             }
         } set: { _ in }

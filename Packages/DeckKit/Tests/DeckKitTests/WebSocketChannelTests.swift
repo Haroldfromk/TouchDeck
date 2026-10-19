@@ -90,3 +90,12 @@ func clientNoticesWhenServerGoesAway() async throws {
     #expect(ContinuousClock.now - start < .seconds(5), "끊긴 걸 5초 안에 알아차려야 한다")
     listener.cancel()
 }
+
+/// 맥이 잠들거나 와이파이가 끊겨 연결이 조용히 죽으면 닫기 신호가 안 온다. TCP keepalive로 알아챈다.
+@Test func parametersEnableKeepalive() throws {
+    let tcp = try #require(DeckNetwork.parameters().defaultProtocolStack.transportProtocol as? NWProtocolTCP.Options)
+    #expect(tcp.enableKeepalive)
+    #expect(tcp.keepaliveIdle == 5)
+    #expect(tcp.keepaliveInterval == 2)
+    #expect(tcp.keepaliveCount == 3)
+}

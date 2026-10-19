@@ -29,6 +29,8 @@ public enum ClientMessage: Equatable, Sendable {
 public enum ServerMessage: Equatable, Sendable {
     case needPairing
     case pairingFailed(remaining: Int)
+    /// 틀린 횟수를 다 써서 잠김. 맥 메뉴에서 풀어야 한다.
+    case pairingLocked
     case paired(token: String)
     case challenge(nonce: String)
     case authorized
@@ -110,6 +112,7 @@ extension ServerMessage: Codable {
         let c = try decoder.container(keyedBy: Key.self)
         switch try c.decode(String.self, forKey: .type) {
         case "needPairing": self = .needPairing
+        case "pairingLocked": self = .pairingLocked
         case "pairingFailed": self = .pairingFailed(remaining: try c.decode(Int.self, forKey: .remaining))
         case "paired": self = .paired(token: try c.decode(String.self, forKey: .token))
         case "challenge": self = .challenge(nonce: try c.decode(String.self, forKey: .nonce))
@@ -135,6 +138,8 @@ extension ServerMessage: Codable {
         switch self {
         case .needPairing:
             try c.encode("needPairing", forKey: .type)
+        case .pairingLocked:
+            try c.encode("pairingLocked", forKey: .type)
         case .pairingFailed(let remaining):
             try c.encode("pairingFailed", forKey: .type)
             try c.encode(remaining, forKey: .remaining)

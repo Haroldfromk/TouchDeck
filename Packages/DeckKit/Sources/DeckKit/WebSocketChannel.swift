@@ -8,7 +8,14 @@ public enum DeckNetwork {
         ws.autoReplyPing = true
         // 앱 목록에 아이콘이 다 들어가서 메시지가 커질 수 있다.
         ws.maximumMessageSize = 16 * 1024 * 1024
-        let params = NWParameters.tcp
+        // 맥이 잠들거나 와이파이가 끊기면 닫기 신호 없이 연결이 죽는다.
+        // 5초 조용하면 2초 간격으로 3번 확인해서, 약 11초 안에 끊긴 걸 알아챈다.
+        let tcp = NWProtocolTCP.Options()
+        tcp.enableKeepalive = true
+        tcp.keepaliveIdle = 5
+        tcp.keepaliveInterval = 2
+        tcp.keepaliveCount = 3
+        let params = NWParameters(tls: nil, tcp: tcp)
         params.defaultProtocolStack.applicationProtocols.insert(ws, at: 0)
         return params
     }
@@ -37,7 +44,10 @@ public final class WebSocketChannel: @unchecked Sendable {
         let meta = NWProtocolWebSocket.Metadata(opcode: .text)
         let context = NWConnection.ContentContext(identifier: "text", metadata: [meta])
         connection.send(content: Data(text.utf8), contentContext: context, isComplete: true,
-                        completion: .contentProcessed { _ in })
+                        completion: .contentProcessed { [weak self] error in
+                            // 보내기가 실패하면 연결이 죽은 것이다. 닫아서 .cancelled를 알린다.
+                            if error != nil { self?.connection.cancel() }
+                        })
     }
 
     public func cancel() {

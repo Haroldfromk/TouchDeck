@@ -17,20 +17,46 @@ import Testing
     #expect(a.beginPairing(deviceId: "d", deviceName: "d") == "0042")
 }
 
-@Test func fiveWrongCodesRegenerate() {
+@Test func fiveWrongCodesLockPairing() {
     var a = PairingAuthority(trusted: [], random: { 1111 })
     _ = a.beginPairing(deviceId: "d", deviceName: "d")
     for r in stride(from: 4, through: 1, by: -1) {
         #expect(a.submit(code: "9999", deviceId: "d") == .wrong(remaining: r))
     }
-    guard case .regenerated = a.submit(code: "9999", deviceId: "d") else { Issue.record("not regenerated"); return }
-    #expect(a.submit(code: "9999", deviceId: "d") == .wrong(remaining: 4))
+    #expect(a.submit(code: "9999", deviceId: "d") == .locked)
+    #expect(a.isLocked)
+    #expect(a.currentCode == nil)
+    #expect(a.submit(code: "1111", deviceId: "d") == .locked)
+    #expect(a.beginPairing(deviceId: "d", deviceName: "d") == nil)
 }
 
-@Test func codeFromOtherDeviceIsRejected() {
-    var a = PairingAuthority(trusted: [], random: { 1234 })
-    _ = a.beginPairing(deviceId: "ipad", deviceName: "iPad")
-    #expect(a.submit(code: "1234", deviceId: "intruder") == .wrong(remaining: 4))
+@Test func helloAgainDoesNotResetAttempts() {
+    // 인사를 다시 할 때마다 횟수가 초기화되면 숫자를 무한히 찍어 볼 수 있다
+    var a = PairingAuthority(trusted: [], random: { 1111 })
+    _ = a.beginPairing(deviceId: "d", deviceName: "d")
+    _ = a.submit(code: "0000", deviceId: "d")
+    _ = a.submit(code: "0001", deviceId: "d")
+    _ = a.beginPairing(deviceId: "d", deviceName: "d")
+    #expect(a.submit(code: "0002", deviceId: "d") == .wrong(remaining: 2))
+}
+
+@Test func unlockAllowsPairingAgain() {
+    var a = PairingAuthority(trusted: [], random: { 1111 })
+    _ = a.beginPairing(deviceId: "d", deviceName: "d")
+    for _ in 0..<5 { _ = a.submit(code: "9999", deviceId: "d") }
+    a.unlock()
+    #expect(a.isLocked == false)
+    #expect(a.beginPairing(deviceId: "d", deviceName: "d") == "1111")
+    guard case .paired = a.submit(code: "1111", deviceId: "d") else { Issue.record("not paired"); return }
+}
+
+@Test func successResetsAttempts() {
+    var a = PairingAuthority(trusted: [], random: { 1111 })
+    _ = a.beginPairing(deviceId: "a", deviceName: "a")
+    _ = a.submit(code: "0000", deviceId: "a")
+    _ = a.submit(code: "1111", deviceId: "a")
+    _ = a.beginPairing(deviceId: "b", deviceName: "b")
+    #expect(a.submit(code: "0000", deviceId: "b") == .wrong(remaining: 4))
 }
 
 @Test func revokedDeviceFailsVerify() {

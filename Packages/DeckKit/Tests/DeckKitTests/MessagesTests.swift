@@ -28,7 +28,7 @@ import Testing
 
 @Test func everyServerMessageRoundTrips() throws {
     let all: [ServerMessage] = [
-        .needPairing, .pairingFailed(remaining: 3), .paired(token: "t"), .challenge(nonce: "n"),
+        .needPairing, .pairingFailed(remaining: 3), .pairingLocked, .paired(token: "t"), .challenge(nonce: "n"),
         .authorized, .unauthorized, .apps([AppInfo(name: "Xcode", bundleId: "com.apple.dt.Xcode", icon: "AAA")]),
         .pressResult(page: 0, index: 1, ok: false, message: "폴더 없음: /x"),
         .pressResult(page: 0, index: 1, ok: true, message: nil),

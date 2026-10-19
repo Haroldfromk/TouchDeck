@@ -39,10 +39,16 @@ struct PairingView: View {
                     .accessibilityLabel("페어링 숫자")
             }
             .onTapGesture { focused = true }
+            .disabled(isLocked)
 
             if case .pairingFailed(_, let remaining) = client.phase {
                 Text("숫자가 맞지 않아요. \(remaining)번 더 시도할 수 있어요.")
                     .foregroundStyle(DeckTheme.failure)
+            }
+            if case .pairingLocked = client.phase {
+                Text("숫자가 여러 번 틀려서 맥이 새 기기 허락을 멈췄어요. 맥 메뉴바의 TouchDeck에서 \"새 기기 허락 다시 받기\"를 누르면 새 숫자가 떠요.")
+                    .foregroundStyle(DeckTheme.failure)
+                    .multilineTextAlignment(.center)
             }
         }
         .padding(32)
@@ -60,6 +66,11 @@ struct PairingView: View {
         }
         .interactiveDismissDisabled()
         .preferredColorScheme(.dark)
+    }
+
+    private var isLocked: Bool {
+        if case .pairingLocked = client.phase { return true }
+        return false
     }
 
     private func digit(at i: Int) -> String {
