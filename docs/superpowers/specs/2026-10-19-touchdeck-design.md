@@ -143,8 +143,9 @@
 
 ```jsonc
 // 기기 → 맥
-{ "type": "hello", "deviceId": "…", "deviceName": "Harold의 iPad", "token": "…(있으면)" }
-{ "type": "pair", "code": "4821" }
+{ "type": "hello", "deviceId": "…", "deviceName": "Harold의 iPad", "nonce": "…" }
+{ "type": "pair", "publicKey": "<base64>", "proof": "<hex>" }   // 숫자는 안 보낸다 (7장)
+{ "type": "auth", "proof": "<hex>" }
 { "type": "press", "page": 0, "index": 3 }
 { "type": "getApps" }
 { "type": "setButton", "page": 0, "index": 3, "button": { "label": "blogrun", "action": { "kind": "command", "command": "blogrun", "directory": "~/Documents/Workspace/blog" } } }
@@ -152,8 +153,10 @@
 { "type": "setVolume", "value": 55 }
 
 // 맥 → 기기
-{ "type": "needPairing" }
-{ "type": "paired", "token": "…" }
+{ "type": "needPairing", "publicKey": "<base64>", "nonce": "…" }
+{ "type": "paired", "proof": "<hex>" }               // 토큰은 안 보낸다 (7장)
+{ "type": "challenge", "nonce": "…", "proof": "<hex>" }
+// 허락 뒤에는 위아래 모든 메시지를 { "type": "secure", "seq": 1, "body": "<원래 메시지 JSON>", "mac": "<hex>" }로 감싼다
 { "type": "layout", "pages": [ { "buttons": [ /* 12칸, 빈 칸은 null */ ] } ] }
 { "type": "apps", "items": [ { "name": "Xcode", "bundleId": "com.apple.dt.Xcode", "icon": "<base64 PNG>" } ] }
 { "type": "pressResult", "page": 0, "index": 3, "ok": true, "message": null }
@@ -193,7 +196,12 @@
 ## 7. 검토 후 정한 것 (Claude 판단, 해롤드 확인용)
 
 - **명령 버튼의 "실행했음"이 뜻하는 것:** 맥 앱은 Alacritty 창 안을 볼 수 없고 `blogrun`은 끝나지 않는 명령이다. 그래서 실행 전에 확인할 수 있는 것만 확인한다. 폴더가 있는지, 명령의 첫 단어가 zsh에서 찾아지는지(별칭/함수/명령, `zsh -ic 'whence …'`). 둘 다 통과하고 Alacritty 창이 열리면 "실행했음", 아니면 "실패: 폴더 없음 / blogrun을 못 찾음"처럼 이유와 함께 알려준다. 명령이 창 안에서 성공했는지까지는 알려주지 않는다
-- **연결 보안:** 집 와이파이라 암호화(TLS)는 하지 않는다. 대신 페어링 뒤에는 토큰을 네트워크로 다시 보내지 않는다. 맥이 매번 새 무작위 값을 보내고, 기기는 토큰으로 만든 서명(HMAC-SHA256)만 돌려준다. 오간 메시지를 엿봐도 다시 써먹을 수 없다. ESP32도 HMAC-SHA256은 기본 라이브러리(mbedtls)로 할 수 있어서 나중에 같은 방식으로 붙는다. 4장의 `hello`의 `token`은 이 방식으로 바뀐다
+- **연결 보안 (2026-10-19 검토 후 해롤드 결정으로 강화):** TLS는 쓰지 않고, ESP32(mbedtls)에서도 되는 X25519 + HKDF-SHA256 + HMAC-SHA256만 쓴다.
+  - 페어링: 맥과 기기가 각자 임시 키를 만들어 공개 키만 주고받고(X25519), 공유 비밀에 4자리 숫자를 섞어 토큰을 양쪽이 계산한다(HKDF). 숫자와 토큰은 네트워크로 나가지 않는다. 기기는 `pair{publicKey, proof}`, 맥은 `paired{proof}`로 서로 같은 숫자를 안다는 걸 증명한다
+  - 재연결: `hello{nonce}` → `challenge{nonce, proof}`(맥이 먼저 토큰을 안다고 증명) → `auth{proof}`. 기기는 맥 증명이 틀리면 끊는다(가짜 맥)
+  - 허락 뒤 모든 메시지는 `{"type":"secure","seq","body","mac"}` 봉투. 방향별 접속 키로 HMAC, 번호가 늘어야만 받는다. 중간에서 넘겨주기만 하는 가짜 맥은 메시지를 만들거나 바꿀 수 없다
+  - 남는 한계: 맨 처음 페어링하는 순간에 공격자가 중간에 끼면 4자리를 오프라인으로 맞춰 볼 수 있다(처음 한 번에만 해당)
+  - 숫자는 합쳐서 5번 틀리면 잠기고 맥 메뉴에서만 풀린다
 - **허락 취소:** 맥 메뉴에 허락한 기기 목록과 "허락 취소"를 둔다. 잃어버리거나 바꾼 기기를 설정 파일을 직접 고치지 않고 지울 수 있게
 - 페이지 추가/삭제, 처음 배치(빈 1페이지), 폴더를 안 적었을 때 기본 폴더(홈), 두 기기에서 동시에 고칠 때(나중 것이 이김)는 만드는 쪽이 정한다
 
