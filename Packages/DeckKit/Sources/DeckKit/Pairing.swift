@@ -6,11 +6,25 @@ public struct TrustedDevice: Codable, Equatable, Hashable, Sendable {
     public var name: String
     /// 키 교환으로 만든 32바이트 토큰(base64). 네트워크로 오간 적이 없는 값이다.
     public var token: String
+    /// 맥 메뉴의 "화면 보기 허용". 기본 꺼짐. 다시 페어링하면 다시 꺼진다.
+    public var screenAllowed: Bool
 
-    public init(id: String, name: String, token: String) {
+    public init(id: String, name: String, token: String, screenAllowed: Bool = false) {
         self.id = id
         self.name = name
         self.token = token
+        self.screenAllowed = screenAllowed
+    }
+
+    private enum CodingKeys: String, CodingKey { case id, name, token, screenAllowed }
+
+    /// 화면 기능 전에 저장한 config.json에는 screenAllowed가 없다. 그때는 꺼짐으로 읽는다.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        name = try c.decode(String.self, forKey: .name)
+        token = try c.decode(String.self, forKey: .token)
+        screenAllowed = try c.decodeIfPresent(Bool.self, forKey: .screenAllowed) ?? false
     }
 }
 
@@ -97,6 +111,15 @@ public struct PairingAuthority: Sendable {
 
     public func isTrusted(deviceId: String) -> Bool {
         trusted.contains { $0.id == deviceId }
+    }
+
+    public func isScreenAllowed(deviceId: String) -> Bool {
+        trusted.first { $0.id == deviceId }?.screenAllowed ?? false
+    }
+
+    public mutating func setScreenAllowed(_ allowed: Bool, deviceId: String) {
+        guard let i = trusted.firstIndex(where: { $0.id == deviceId }) else { return }
+        trusted[i].screenAllowed = allowed
     }
 
     public mutating func revoke(deviceId: String) {

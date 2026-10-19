@@ -65,6 +65,14 @@ public enum ClientMessage: Equatable, Sendable {
     case typeKey(TypedKey)
     /// 폴더 고르기: 이 폴더("~" 또는 "~/…")의 하위 폴더 목록을 달라
     case listFolder(path: String)
+    /// 맥 화면: 모니터 목록(미리보기 포함)을 달라
+    case listDisplays
+    /// 이 모니터를 긴 변 maxSide 픽셀 안으로 줄여서 보내 달라. 영상은 바이너리 메시지로 온다
+    case startScreen(displayId: UInt32, maxSide: Int)
+    case stopScreen
+    /// 영상이 깨졌거나 처음 붙었다. 다음 프레임을 키프레임으로 달라
+    case requestKeyframe
+    case pointer(PointerEvent)
 }
 
 /// 맥 → 기기
@@ -89,12 +97,17 @@ public enum ServerMessage: Equatable, Sendable {
     case volume(value: Int, muted: Bool, available: Bool, keysAllowed: Bool)
     /// 폴더 고르기 답. children은 하위 폴더 이름(숨김 폴더, 앱 제외). 없는 폴더거나 홈 밖이면 ok == false
     case folder(path: String, children: [String], ok: Bool)
+    case displays([DisplayInfo])
+    /// 영상 크기(픽셀). 프레임은 이 뒤로 바이너리 메시지로 온다
+    case screenStarted(displayId: UInt32, width: Int, height: Int)
+    case screenStatus(ScreenState, message: String?)
 }
 
 /// 모든 메시지가 쓰는 JSON 키. 최상위 `type`으로 종류를 나눈다.
 private enum Key: String, CodingKey {
     case type, deviceId, deviceName, publicKey, proof, page, index, button, value
     case remaining, nonce, pages, items, ok, message, muted, available, keysAllowed, key, path, children
+    case displayId, maxSide, width, height, state
 }
 
 extension ClientMessage: Codable {
@@ -121,6 +134,13 @@ extension ClientMessage: Codable {
         case "volumeKey": self = .volumeKey(try c.decode(VolumeKey.self, forKey: .key))
         case "typeKey": self = .typeKey(try c.decode(TypedKey.self, forKey: .key))
         case "listFolder": self = .listFolder(path: try c.decode(String.self, forKey: .path))
+        case "listDisplays": self = .listDisplays
+        case "startScreen":
+            self = .startScreen(displayId: try c.decode(UInt32.self, forKey: .displayId), maxSide: try c.decode(Int.self, forKey: .maxSide))
+        case "stopScreen": self = .stopScreen
+        case "requestKeyframe": self = .requestKeyframe
+        // 터치 값(kind, x, y, dx, dy)은 type과 같은 단계에 펼쳐 둔다
+        case "pointer": self = .pointer(try PointerEvent(from: decoder))
         case let other:
             throw DecodingError.dataCorruptedError(forKey: .type, in: c, debugDescription: "unknown type \(other)")
         }
@@ -168,6 +188,19 @@ extension ClientMessage: Codable {
         case .listFolder(let path):
             try c.encode("listFolder", forKey: .type)
             try c.encode(path, forKey: .path)
+        case .listDisplays:
+            try c.encode("listDisplays", forKey: .type)
+        case .startScreen(let displayId, let maxSide):
+            try c.encode("startScreen", forKey: .type)
+            try c.encode(displayId, forKey: .displayId)
+            try c.encode(maxSide, forKey: .maxSide)
+        case .stopScreen:
+            try c.encode("stopScreen", forKey: .type)
+        case .requestKeyframe:
+            try c.encode("requestKeyframe", forKey: .type)
+        case .pointer(let event):
+            try c.encode("pointer", forKey: .type)
+            try event.encode(to: encoder)
         }
     }
 }
@@ -199,6 +232,12 @@ extension ServerMessage: Codable {
             self = .volume(value: try c.decode(Int.self, forKey: .value), muted: try c.decode(Bool.self, forKey: .muted),
                            available: try c.decodeIfPresent(Bool.self, forKey: .available) ?? true,
                            keysAllowed: try c.decodeIfPresent(Bool.self, forKey: .keysAllowed) ?? true)
+        case "displays": self = .displays(try c.decode([DisplayInfo].self, forKey: .items))
+        case "screenStarted":
+            self = .screenStarted(displayId: try c.decode(UInt32.self, forKey: .displayId),
+                                  width: try c.decode(Int.self, forKey: .width), height: try c.decode(Int.self, forKey: .height))
+        case "screenStatus":
+            self = .screenStatus(try c.decode(ScreenState.self, forKey: .state), message: try c.decodeIfPresent(String.self, forKey: .message))
         case let other:
             throw DecodingError.dataCorruptedError(forKey: .type, in: c, debugDescription: "unknown type \(other)")
         }
@@ -250,6 +289,18 @@ extension ServerMessage: Codable {
             try c.encode(muted, forKey: .muted)
             try c.encode(available, forKey: .available)
             try c.encode(keysAllowed, forKey: .keysAllowed)
+        case .displays(let items):
+            try c.encode("displays", forKey: .type)
+            try c.encode(items, forKey: .items)
+        case .screenStarted(let displayId, let width, let height):
+            try c.encode("screenStarted", forKey: .type)
+            try c.encode(displayId, forKey: .displayId)
+            try c.encode(width, forKey: .width)
+            try c.encode(height, forKey: .height)
+        case .screenStatus(let state, let message):
+            try c.encode("screenStatus", forKey: .type)
+            try c.encode(state, forKey: .state)
+            try c.encodeIfPresent(message, forKey: .message)
         }
     }
 }
