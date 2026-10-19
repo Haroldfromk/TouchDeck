@@ -80,7 +80,10 @@ final class ScreenStreamer: NSObject, SCStreamOutput, SCStreamDelegate, @uncheck
         guard let display = try await DisplayCatalog.displays().first(where: { $0.displayID == displayId }) else {
             throw StartError.noDisplay
         }
-        let size = ScreenGeometry.fit(width: display.width, height: display.height, maxSide: maxSide)
+        // 포인트가 아니라 실제 픽셀 기준으로 맞춘다. 레티나 맥북은 1512포인트지만 픽셀은 3024라 절반으로 찍으면 흐리다
+        let mode = CGDisplayCopyDisplayMode(displayId)
+        let pixels = (width: mode?.pixelWidth ?? display.width, height: mode?.pixelHeight ?? display.height)
+        let size = ScreenGeometry.fit(width: pixels.width, height: pixels.height, maxSide: maxSide)
         let streamer = ScreenStreamer(width: size.width, height: size.height, onPacket: onPacket, onStop: onStop)
         try await streamer.start(display: display)
         return streamer
@@ -95,6 +98,8 @@ final class ScreenStreamer: NSObject, SCStreamOutput, SCStreamDelegate, @uncheck
         config.pixelFormat = kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange
         config.showsCursor = true
         config.queueDepth = 4
+        // 원본 해상도로 찍은 뒤 줄인다 (기본값은 레티나에서 낮은 해상도로 찍을 수 있다)
+        config.captureResolution = .best
         let stream = SCStream(filter: SCContentFilter(display: display, excludingWindows: []), configuration: config, delegate: self)
         try stream.addStreamOutput(self, type: .screen, sampleHandlerQueue: queue)
         try await stream.startCapture()
@@ -148,11 +153,15 @@ final class ScreenStreamer: NSObject, SCStreamOutput, SCStreamDelegate, @uncheck
         VTSessionSetProperty(session, key: kVTCompressionPropertyKey_AllowFrameReordering, value: kCFBooleanFalse)
         VTSessionSetProperty(session, key: kVTCompressionPropertyKey_MaxKeyFrameIntervalDuration, value: 2 as CFNumber)
         VTSessionSetProperty(session, key: kVTCompressionPropertyKey_ExpectedFrameRate, value: 30 as CFNumber)
-        // 글자가 많은 화면이라 넉넉하게: 1920×804면 약 7Mbps
-        let bitRate = Int(Double(width * height) * 30 * 0.15)
-        VTSessionSetProperty(session, key: kVTCompressionPropertyKey_AverageBitRate, value: bitRate as CFNumber)
+        VTSessionSetProperty(session, key: kVTCompressionPropertyKey_AverageBitRate,
+                             value: Self.bitRate(width: width, height: height) as CFNumber)
         VTCompressionSessionPrepareToEncodeFrames(session)
         encoder = session
+    }
+
+    /// 글자가 많은 화면이라 넉넉하게(픽셀당 0.2비트 × 30장). 와이파이가 버티게 25Mbps에서 멈춘다
+    static func bitRate(width: Int, height: Int) -> Int {
+        min(Int(Double(width * height) * 30 * 0.2), 25_000_000)
     }
 
     private func encode(_ frame: CVPixelBuffer) {

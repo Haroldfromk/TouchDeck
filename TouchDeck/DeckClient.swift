@@ -151,12 +151,19 @@ final class DeckClient {
         send(.listDisplays)
     }
 
-    /// 아이패드는 긴 변 1920, 아이폰은 1280으로 받는다
+    /// 이 기기 화면의 실제 픽셀 크기로 받는다. 그보다 작게 받으면 늘려서 보여주느라 글자가 흐려진다
     func startScreen(_ displayId: UInt32) {
         guard isConnected else { return }
         screenNotice = nil
         video.reset()
-        send(.startScreen(displayId: displayId, maxSide: UIDevice.current.userInterfaceIdiom == .pad ? 1920 : 1280))
+        send(.startScreen(displayId: displayId, maxSide: screenPixelLongSide))
+    }
+
+    /// 11인치 아이패드는 2388, 12.9인치는 2732
+    private var screenPixelLongSide: Int {
+        let screen = UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.screen }.first
+        let size = screen?.nativeBounds.size ?? CGSize(width: 1920, height: 1080)
+        return Int(max(size.width, size.height))
     }
 
     func stopScreen() {

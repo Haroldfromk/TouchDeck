@@ -2,7 +2,8 @@ import DeckKit
 import SwiftUI
 import UIKit
 
-/// 맥 화면 전체 보기. 탭=클릭, 두 손가락 탭=우클릭, 한 손가락 끌기=드래그, 두 손가락 쓸기=스크롤, 핀치=이 화면만 확대.
+/// 맥 화면 전체 보기. 탭=클릭, 두 손가락 탭=우클릭, 한 손가락이나 두 손가락 쓸기=스크롤,
+/// 길게 눌렀다 끌기=드래그(블록 선택, 창 옮기기), 핀치=이 화면만 확대.
 struct ScreenViewer: View {
     let client: DeckClient
     let display: DisplayInfo
@@ -117,6 +118,8 @@ private struct VideoSurface: UIViewRepresentable {
     final class SurfaceView: UIView {
         let videoView = UIView()
         private let videoLayer: CALayer
+        /// 길게 눌러 끌기가 잡혔다는 표시. 아이패드는 진동이 없어서 눈으로 보이게 한다
+        private let ring = UIView(frame: CGRect(x: 0, y: 0, width: 56, height: 56))
 
         init(videoLayer: CALayer) {
             self.videoLayer = videoLayer
@@ -126,6 +129,30 @@ private struct VideoSurface: UIViewRepresentable {
             videoView.isUserInteractionEnabled = false
             videoView.layer.addSublayer(videoLayer)
             addSubview(videoView)
+            ring.isUserInteractionEnabled = false
+            ring.layer.cornerRadius = 28
+            ring.layer.borderWidth = 3
+            ring.layer.borderColor = UIColor.white.withAlphaComponent(0.9).cgColor
+            ring.backgroundColor = UIColor.white.withAlphaComponent(0.15)
+            ring.alpha = 0
+            addSubview(ring)
+        }
+
+        func showRing(at point: CGPoint) {
+            ring.center = point
+            ring.transform = CGAffineTransform(scaleX: 1.6, y: 1.6)
+            UIView.animate(withDuration: 0.15) {
+                self.ring.alpha = 1
+                self.ring.transform = .identity
+            }
+        }
+
+        func moveRing(to point: CGPoint) {
+            ring.center = point
+        }
+
+        func hideRing() {
+            UIView.animate(withDuration: 0.15) { self.ring.alpha = 0 }
         }
 
         required init?(coder: NSCoder) { fatalError() }
@@ -145,7 +172,7 @@ private struct VideoSurface: UIViewRepresentable {
     @MainActor
     final class Coordinator: NSObject, UIGestureRecognizerDelegate {
         var parent: VideoSurface
-        private weak var view: UIView?
+        private weak var view: SurfaceView?
 
         /// 두 손가락 제스처를 시작할 때 정한다: 벌리면 확대(맥에 안 보냄), 그냥 쓸면 스크롤
         private enum TwoFinger { case undecided, zoom, scroll }
@@ -162,19 +189,24 @@ private struct VideoSurface: UIViewRepresentable {
             self.parent = parent
         }
 
-        func attach(to view: UIView) {
+        func attach(to view: SurfaceView) {
             self.view = view
             let tap = UITapGestureRecognizer(target: self, action: #selector(tap(_:)))
             let twoTap = UITapGestureRecognizer(target: self, action: #selector(twoFingerTap(_:)))
             twoTap.numberOfTouchesRequired = 2
-            let drag = UIPanGestureRecognizer(target: self, action: #selector(drag(_:)))
-            drag.minimumNumberOfTouches = 1
-            drag.maximumNumberOfTouches = 1
+            // 한 손가락으로 쓸면 스크롤. 아이패드에서 손에 익은 동작이라 이쪽을 기본으로 한다
+            let oneScroll = UIPanGestureRecognizer(target: self, action: #selector(oneFingerScroll(_:)))
+            oneScroll.minimumNumberOfTouches = 1
+            oneScroll.maximumNumberOfTouches = 1
+            // 0.4초 가만히 대고 있으면 끌기. 그 전에 10포인트 넘게 움직이면 스크롤로 간다
+            let drag = UILongPressGestureRecognizer(target: self, action: #selector(drag(_:)))
+            drag.minimumPressDuration = 0.4
+            drag.allowableMovement = 10
             let twoPan = UIPanGestureRecognizer(target: self, action: #selector(twoFingerPan(_:)))
             twoPan.minimumNumberOfTouches = 2
             twoPan.maximumNumberOfTouches = 2
             let pinch = UIPinchGestureRecognizer(target: self, action: #selector(pinch(_:)))
-            for g in [tap, twoTap, drag, twoPan, pinch] as [UIGestureRecognizer] {
+            for g in [tap, twoTap, oneScroll, drag, twoPan, pinch] as [UIGestureRecognizer] {
                 g.delegate = self
                 view.addGestureRecognizer(g)
             }
@@ -214,23 +246,19 @@ private struct VideoSurface: UIViewRepresentable {
             send(.rightClick, p)
         }
 
-        @objc private func drag(_ g: UIPanGestureRecognizer) {
+        /// 길게 눌러서 잡은 뒤 끌기: 누른 자리에서 왼쪽 버튼을 누르고, 끄는 동안 움직이고, 떼면 놓는다
+        @objc private func drag(_ g: UILongPressGestureRecognizer) {
             let here = g.location(in: view)
             switch g.state {
             case .began:
-                // 두 손가락이면 스크롤이나 확대 쪽이다
-                guard g.numberOfTouches == 1 else { return }
-                // 끌기로 알아챈 순간엔 손가락이 조금 움직인 뒤라, 처음 닿은 곳에서 누른다
-                let t = g.translation(in: view)
-                guard let start = normalized(CGPoint(x: here.x - t.x, y: here.y - t.y)) else { return }
+                guard let start = normalized(here) else { return }
                 lastDragPoint = start
                 send(.down, start)
-                if let p = normalized(here) {
-                    lastDragPoint = p
-                    send(.move, p)
-                }
+                view?.showRing(at: here)
             case .changed:
-                guard lastDragPoint != nil, let p = normalized(here) else { return }
+                guard lastDragPoint != nil else { return }
+                view?.moveRing(to: here)
+                guard let p = normalized(here) else { return }
                 lastDragPoint = p
                 if throttled() { send(.move, p) }
             case .ended, .cancelled, .failed:
@@ -239,6 +267,25 @@ private struct VideoSurface: UIViewRepresentable {
                 send(.move, p)
                 send(.up, p)
                 lastDragPoint = nil
+                view?.hideRing()
+            default:
+                break
+            }
+        }
+
+        @objc private func oneFingerScroll(_ g: UIPanGestureRecognizer) {
+            let t = g.translation(in: view)
+            switch g.state {
+            case .began:
+                lastPanTranslation = t
+                pendingScroll = .zero
+            case .changed:
+                pendingScroll.x += t.x - lastPanTranslation.x
+                pendingScroll.y += t.y - lastPanTranslation.y
+                lastPanTranslation = t
+                if throttled() { flushScroll(at: g.location(in: view)) }
+            case .ended, .cancelled, .failed:
+                flushScroll(at: g.location(in: view))
             default:
                 break
             }

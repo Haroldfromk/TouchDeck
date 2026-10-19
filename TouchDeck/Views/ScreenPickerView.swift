@@ -8,6 +8,9 @@ struct ScreenPickerView: View {
     /// 보기 화면의 "닫기": 스트림덱 탭으로 돌아간다
     let onClose: () -> Void
     @State private var viewing: DisplayInfo?
+    /// 목록을 달라고 한 뒤 5초가 지나도 답이 없다
+    @State private var noReply = false
+    @State private var requestCount = 0
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -17,7 +20,7 @@ struct ScreenPickerView: View {
                     .foregroundStyle(DeckTheme.legendDim)
                 Spacer()
                 Button {
-                    client.listDisplays()
+                    requestDisplays()
                 } label: {
                     Label("다시 불러오기", systemImage: "arrow.clockwise")
                         .font(.callout.weight(.medium))
@@ -35,10 +38,21 @@ struct ScreenPickerView: View {
             }
 
             if client.displays.isEmpty && client.screenNotice == nil {
-                ProgressView("맥 모니터 목록을 불러오는 중")
-                    .tint(DeckTheme.legend)
-                    .foregroundStyle(DeckTheme.legendDim)
-                    .frame(maxWidth: .infinity)
+                if noReply {
+                    // 화면 기능 전의 맥 앱은 모르는 메시지를 답 없이 버린다
+                    Label("맥이 답하지 않아요. 맥의 TouchDeck이 화면 기능 전 버전일 수 있어요. 맥 앱을 새로 빌드해서 설치해 주세요",
+                          systemImage: "exclamationmark.circle.fill")
+                        .font(.callout.weight(.medium))
+                        .foregroundStyle(DeckTheme.legend)
+                        .padding(14)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(DeckTheme.terminal.opacity(0.22), in: .rect(cornerRadius: 12))
+                } else {
+                    ProgressView("맥 모니터 목록을 불러오는 중")
+                        .tint(DeckTheme.legend)
+                        .foregroundStyle(DeckTheme.legendDim)
+                        .frame(maxWidth: .infinity)
+                }
             }
 
             GeometryReader { geo in
@@ -56,16 +70,21 @@ struct ScreenPickerView: View {
                 .scrollBounceBehavior(.basedOnSize)
             }
         }
-        .onAppear { client.listDisplays() }
+        .onAppear { requestDisplays() }
         .onChange(of: client.isConnected) { _, connected in
-            if connected { client.listDisplays() } else { viewing = nil }
+            if connected { requestDisplays() } else { viewing = nil }
+        }
+        .task(id: requestCount) {
+            noReply = false
+            try? await Task.sleep(for: .seconds(5))
+            if client.isConnected && client.displays.isEmpty && client.screenNotice == nil { noReply = true }
         }
         .fullScreenCover(item: $viewing) { display in
             ScreenViewer(client: client, display: display,
                          onChangeMonitor: {
                              client.stopScreen()
                              viewing = nil
-                             client.listDisplays()
+                             requestDisplays()
                          },
                          onClose: {
                              client.stopScreen()
@@ -73,6 +92,11 @@ struct ScreenPickerView: View {
                              onClose()
                          })
         }
+    }
+
+    private func requestDisplays() {
+        client.listDisplays()
+        requestCount += 1
     }
 
     /// 맥이 보여줄 수 없다고 답한 이유와 고치는 곳
