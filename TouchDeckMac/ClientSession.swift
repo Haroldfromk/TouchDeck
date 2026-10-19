@@ -28,6 +28,13 @@ final class ClientSession: Identifiable {
         self.channel = channel
     }
 
+    /// 맥 화면 영상. 허락받은 뒤에만, 이번 접속 키로 봉인해서 보낸다.
+    func sendBinary(_ data: Data, onSent: (@Sendable () -> Void)? = nil) {
+        guard var secure else { return }
+        channel.sendBinary(secure.sealBinary(data), onSent: onSent)
+        self.secure = secure
+    }
+
     func send(_ message: ServerMessage) {
         guard let text = try? message.encoded() else { return }
         if var secure {

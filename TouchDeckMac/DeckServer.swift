@@ -29,6 +29,7 @@ final class DeckServer {
     private(set) var isPairingLocked = false
     private(set) var connectedDevices: [String] = []
     private(set) var trusted: [TrustedDevice] = []
+    let screen = ScreenHost()
 
     private let store: ConfigStore
     private let actions: DeckActions
@@ -77,7 +78,15 @@ final class DeckServer {
         }
     }
 
+    /// 맥 메뉴의 기기별 "화면 보기 허용". 끄면 보고 있던 화면도 바로 끊는다.
+    func setScreenAllowed(_ allowed: Bool, deviceId: String) {
+        authority.setScreenAllowed(allowed, deviceId: deviceId)
+        saveTrusted()
+        if !allowed { screen.deviceDisallowed(deviceId) }
+    }
+
     func revoke(deviceId: String) {
+        screen.deviceDisallowed(deviceId)
         authority.revoke(deviceId: deviceId)
         saveTrusted()
         for session in sessions where session.deviceId == deviceId {
@@ -109,6 +118,10 @@ final class DeckServer {
                 self.handle(text, from: session)
             }
         }
+        // 기기는 맥에 바이너리를 보낼 일이 없다. 오면 끊는다
+        channel.onBinary = { [weak session] _ in
+            MainActor.assumeIsolated { session?.channel.cancel() }
+        }
         channel.onState = { [weak self, weak session] state in
             MainActor.assumeIsolated {
                 guard let self, let session else { return }
@@ -128,6 +141,7 @@ final class DeckServer {
 
     private func drop(_ session: ClientSession) {
         sessions.removeAll { $0 === session }
+        screen.sessionDropped(session)
         if let deviceId = session.deviceId {
             authority.cancelPairing(deviceId: deviceId)
             pairingCode = authority.currentCode
@@ -147,8 +161,8 @@ final class DeckServer {
                 let body = try secure.open(text)
                 session.secure = secure
                 guard let message = try? ClientMessage.decode(body) else { return }
-                // 키패드로 친 키(비밀번호일 수 있다)는 로그에 남기지 않는다
-                if case .typeKey = message {} else {
+                // 키패드로 친 키(비밀번호일 수 있다)는 로그에 남기지 않는다. 화면 터치는 초당 60번까지 와서 뺀다
+                if !Self.isQuiet(message) {
                     print("[server] <- (봉투)", text.prefix(220))
                     print("[server] <- (암호 풀림)", session.deviceName ?? "?", body.prefix(200))
                 }
@@ -310,8 +324,34 @@ final class DeckServer {
                 session.send(.folder(path: path, children: children ?? [], ok: children != nil))
             }
 
+        case .listDisplays:
+            screen.listDisplays(for: session, allowed: screenAllowed(session))
+
+        case .startScreen(let displayId, let maxSide):
+            screen.start(session, displayId: displayId, maxSide: maxSide, allowed: screenAllowed(session))
+
+        case .stopScreen:
+            screen.stop(session)
+
+        case .requestKeyframe:
+            screen.requestKeyframe(session)
+
+        case .pointer(let event):
+            screen.pointer(event, from: session)
+
         case .hello, .pair, .auth:
             break
+        }
+    }
+
+    private func screenAllowed(_ session: ClientSession) -> Bool {
+        session.deviceId.map { authority.isScreenAllowed(deviceId: $0) } ?? false
+    }
+
+    private static func isQuiet(_ message: ClientMessage) -> Bool {
+        switch message {
+        case .typeKey, .pointer, .requestKeyframe: true
+        default: false
         }
     }
 

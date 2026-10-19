@@ -32,7 +32,7 @@ import Testing
         .screenStarted(displayId: 1, width: 1920, height: 804),
         .screenStatus(.ok, message: nil), .screenStatus(.notAllowed, message: "맥 메뉴에서 화면 보기를 켜 주세요"),
         .screenStatus(.noPermission, message: nil), .screenStatus(.busy, message: "Harold의 iPhone"),
-        .screenStatus(.locked, message: nil), .screenStatus(.stopped, message: nil),
+        .screenStatus(.locked, message: nil), .screenStatus(.stopped, message: nil), .screenStatus(.noInput, message: nil),
     ]
     for m in all { #expect(try ServerMessage.decode(m.encoded()) == m) }
 }

@@ -38,6 +38,31 @@ struct MenuContent: View {
                 .background(.red.opacity(0.12), in: .rect(cornerRadius: 8))
             }
 
+            if let viewer = server.screen.viewerName {
+                HStack {
+                    Label("지금 화면을 보는 중: \(viewer)", systemImage: "eye.fill")
+                        .font(.callout.weight(.medium))
+                    Spacer()
+                    Button("끊기") { server.screen.disconnect() }
+                }
+                .padding(10)
+                .background(.blue.opacity(0.15), in: .rect(cornerRadius: 8))
+            }
+
+            if server.trusted.contains(where: \.screenAllowed) && !server.screen.permission {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("화면 보기에는 화면 기록 권한이 필요해요. 켠 뒤 TouchDeck을 다시 실행해 주세요.")
+                        .font(.caption)
+                    Button("화면 기록 설정 열기") {
+                        ScreenPermission.request()
+                        ScreenPermission.openSettings()
+                    }
+                }
+                .padding(10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(.orange.opacity(0.15), in: .rect(cornerRadius: 8))
+            }
+
             section("연결된 기기") {
                 if server.connectedDevices.isEmpty {
                     Text("없음").foregroundStyle(.secondary)
@@ -51,11 +76,18 @@ struct MenuContent: View {
                     Text("없음").foregroundStyle(.secondary)
                 } else {
                     ForEach(server.trusted, id: \.id) { device in
-                        HStack {
-                            Text(device.name)
-                            Spacer()
-                            Button("허락 취소") { server.revoke(deviceId: device.id) }
-                                .controlSize(.small)
+                        VStack(alignment: .leading, spacing: 2) {
+                            HStack {
+                                Text(device.name)
+                                Spacer()
+                                Button("허락 취소") { server.revoke(deviceId: device.id) }
+                                    .controlSize(.small)
+                            }
+                            Toggle("화면 보기 허용", isOn: Binding(
+                                get: { device.screenAllowed },
+                                set: { server.setScreenAllowed($0, deviceId: device.id) }
+                            ))
+                            .controlSize(.small)
                         }
                     }
                 }
@@ -79,7 +111,10 @@ struct MenuContent: View {
         .padding(14)
         .frame(width: 280)
         // 시스템 설정에서 바꿨을 수도 있으니 창을 열 때마다 다시 읽는다
-        .onAppear { launchAtLogin = loginItem.isOn }
+        .onAppear {
+            launchAtLogin = loginItem.isOn
+            server.screen.refreshPermission()
+        }
     }
 
     private func section<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {

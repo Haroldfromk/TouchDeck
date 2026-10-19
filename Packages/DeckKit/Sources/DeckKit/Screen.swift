@@ -53,6 +53,8 @@ public enum ScreenState: String, Codable, Sendable {
     case locked
     /// 맥에서 끊었다
     case stopped
+    /// 화면은 보이지만 맥 앱에 손쉬운 사용 권한이 없어서 조작은 안 된다
+    case noInput
 }
 
 /// 화면을 보여줘도 되는지. 네트워크와 캡처는 모르고 판단만 한다.

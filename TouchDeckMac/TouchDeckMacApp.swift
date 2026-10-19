@@ -38,7 +38,9 @@ struct TouchDeckMacApp: App {
         MenuBarExtra {
             MenuContent(server: server)
         } label: {
-            Image(systemName: server.pairingCode == nil ? "square.grid.3x3.fill" : "number.square.fill")
+            // 누가 맥 화면을 보고 있으면 메뉴바 아이콘이 눈으로 바뀐다
+            Image(systemName: server.screen.viewerName != nil ? "eye.fill"
+                  : server.pairingCode == nil ? "square.grid.3x3.fill" : "number.square.fill")
         }
         .menuBarExtraStyle(.window)
     }
