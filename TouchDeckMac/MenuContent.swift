@@ -39,11 +39,18 @@ struct MenuContent: View {
             }
 
             if let viewer = server.screen.viewerName {
-                HStack {
-                    Label("지금 화면을 보는 중: \(viewer)", systemImage: "eye.fill")
-                        .font(.callout.weight(.medium))
-                    Spacer()
-                    Button("끊기") { server.screen.disconnect() }
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Label("지금 화면을 보는 중: \(viewer)", systemImage: "eye.fill")
+                            .font(.callout.weight(.medium))
+                        Spacer()
+                        Button("끊기") { server.screen.disconnect() }
+                    }
+                    if let note = server.screen.speakerNote {
+                        Label(note, systemImage: "speaker.wave.2.fill")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
                 .padding(10)
                 .background(.blue.opacity(0.15), in: .rect(cornerRadius: 8))

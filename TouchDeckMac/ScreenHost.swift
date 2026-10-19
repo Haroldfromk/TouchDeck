@@ -1,3 +1,4 @@
+import AppKit
 import CoreGraphics
 import DeckKit
 import Foundation
@@ -10,6 +11,8 @@ final class ScreenHost {
     /// 메뉴바에 "지금 화면을 보는 중"으로 보여줄 기기 이름
     private(set) var viewerName: String?
     private(set) var permission = ScreenPermission.granted
+    /// 메뉴바에 보여줄 소리 상태. 소리를 안 보내면 nil
+    private(set) var speakerNote: String?
 
     @ObservationIgnored private var viewer: ClientSession?
     @ObservationIgnored private var streamer: ScreenStreamer?
@@ -21,6 +24,22 @@ final class ScreenHost {
     /// 시작을 연달아 누르면 늦게 끝난 옛 시작이 새 스트림을 덮지 않게 번호로 구분한다
     @ObservationIgnored private var generation = 0
     @ObservationIgnored private var warnedNoInput = false
+    @ObservationIgnored private var fps = ScreenFPS.low
+    /// 보는 기기가 소리를 받겠다고 했는지
+    @ObservationIgnored private var audioOn = false
+    /// 소리 묶음은 작지만 와이파이가 막히면 쌓인다. 10개(약 0.1~0.2초)가 밀려 있으면 버린다
+    @ObservationIgnored private var audioGate = SendGate(limit: 10)
+    @ObservationIgnored private var terminateObserver: NSObjectProtocol?
+
+    init() {
+        // 화면 보기 중에 맥 앱이 죽었으면 꺼 둔 맥 스피커를 되돌린다
+        SpeakerMute.restore()
+        terminateObserver = NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification,
+                                                                   object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.stopStream() }
+            SpeakerMute.restoreAndWait()
+        }
+    }
 
     func refreshPermission() {
         permission = ScreenPermission.granted
@@ -35,7 +54,7 @@ final class ScreenHost {
         }
     }
 
-    func start(_ session: ClientSession, displayId: UInt32, maxSide: Int, allowed: Bool) {
+    func start(_ session: ClientSession, displayId: UInt32, maxSide: Int, fps: Int, audio: Bool, allowed: Bool) {
         guard check(session, allowed: allowed) else { return }
         stopStream()
         generation += 1
@@ -43,8 +62,13 @@ final class ScreenHost {
         viewer = session
         viewerName = session.deviceName ?? "기기"
         warnedNoInput = false
+        self.fps = fps
+        audioOn = audio
         let onPacket: @Sendable (VideoPacket) -> Void = { [weak self] packet in
             Task { @MainActor in self?.deliver(packet, generation: current) }
+        }
+        let onAudio: @Sendable (AudioPacket) -> Void = { [weak self] packet in
+            Task { @MainActor in self?.deliverAudio(packet, generation: current) }
         }
         let onStop: @Sendable () -> Void = { [weak self] in
             Task { @MainActor in
@@ -56,7 +80,8 @@ final class ScreenHost {
         Task {
             let streamer: ScreenStreamer
             do {
-                streamer = try await ScreenStreamer.start(displayId: displayId, maxSide: maxSide, onPacket: onPacket, onStop: onStop)
+                streamer = try await ScreenStreamer.start(displayId: displayId, maxSide: maxSide, fps: fps,
+                                                          onPacket: onPacket, onAudio: onAudio, onStop: onStop)
             } catch {
                 print("[screen] start failed:", error)
                 guard current == generation else { return }
@@ -68,10 +93,33 @@ final class ScreenHost {
             guard current == generation else { return streamer.stop() }
             self.streamer = streamer
             self.display = CGDisplayBounds(displayId)
-            gate = SendGate()
-            print("[screen] start", viewerName ?? "?", displayId, streamer.width, streamer.height)
+            // 시작하는 사이에 fps를 바꿨으면 따라간다
+            if self.fps != fps { streamer.setFrameRate(self.fps) }
+            gate = SendGate(limit: SendGate.limit(forFPS: self.fps))
+            audioGate = SendGate(limit: 10)
+            print("[screen] start", viewerName ?? "?", displayId, streamer.width, streamer.height, "\(self.fps)fps", audioOn ? "audio" : "")
             session.send(.screenStarted(displayId: displayId, width: streamer.width, height: streamer.height))
+            if audioOn { muteSpeaker(generation: current) }
             watchLock()
+        }
+    }
+
+    /// 보는 중에 30/60이나 소리를 바꾼다. 보고 있는 기기만
+    func options(_ session: ClientSession, fps: Int, audio: Bool) {
+        guard session === viewer else { return }
+        if fps != self.fps {
+            self.fps = fps
+            streamer?.setFrameRate(fps)
+            gate.limit = SendGate.limit(forFPS: fps)
+        }
+        guard audio != audioOn else { return }
+        audioOn = audio
+        if !audio {
+            SpeakerMute.restore()
+            speakerNote = nil
+        } else if streamer != nil {
+            // 아직 시작하는 중이면 시작이 끝날 때 끈다
+            muteSpeaker(generation: generation)
         }
     }
 
@@ -141,6 +189,29 @@ final class ScreenHost {
         }
     }
 
+    private func deliverAudio(_ packet: AudioPacket, generation current: Int) {
+        guard current == generation, streamer != nil, audioOn, let viewer else { return }
+        // 소리엔 키프레임이 없다. 모든 묶음을 같은 무게로 세고, 키프레임 요청 신호는 읽지 않는다
+        guard audioGate.begin(keyframe: true) else { return }
+        viewer.sendBinary(packet.encoded()) { [weak self] in
+            MainActor.assumeIsolated { self?.audioGate.finish() }
+        }
+    }
+
+    /// 소리를 아이패드로 보내는 동안 맥 스피커를 끈다. 결과는 메뉴바에 보여준다
+    private func muteSpeaker(generation current: Int) {
+        SpeakerMute.mute { [weak self] start in
+            Task { @MainActor in
+                guard let self, current == self.generation, self.audioOn else { return }
+                self.speakerNote = switch start {
+                case .muted: "소리를 아이패드로 보내는 중 (맥 스피커 꺼 둠)"
+                case .alreadyMuted: "소리를 아이패드로 보내는 중"
+                case .cannotMute: "소리를 아이패드로 보내는 중 (맥 스피커를 끌 수 없는 장치예요)"
+                }
+            }
+        }
+    }
+
     /// 보는 동안 1초마다: 맥이 잠기면 화면 보기를 멈춘다
     private func watchLock() {
         lockWatch?.cancel()
@@ -157,7 +228,12 @@ final class ScreenHost {
         }
     }
 
+    /// 끝나는 모든 길(닫기, 끊김, 잠김, 메뉴 "끊기", 허용 끄기, 앱 종료)이 여기를 지난다
     private func stopStream() {
+        // 우리가 끈 맥 스피커만 되돌린다. 끄기가 아직 도는 중이어도 그 뒤에 되돌린다
+        SpeakerMute.restore()
+        speakerNote = nil
+        audioOn = false
         PointerInjector.post(plan.release())
         streamer?.stop()
         streamer = nil

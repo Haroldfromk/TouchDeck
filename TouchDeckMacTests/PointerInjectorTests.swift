@@ -69,12 +69,12 @@ private let t0 = Date(timeIntervalSince1970: 1000)
 
 // MARK: - 압축 비트레이트
 
-@Test func bitRateGrowsWithSizeForSharpText() {
-    // 11인치 아이패드 크기(2388×1000)면 약 14Mbps
-    #expect(ScreenStreamer.bitRate(width: 2388, height: 1000) == 14_328_000)
+@Test func bitRateScalesWithFps() {
+    // 11인치 아이패드 해상도: 30fps는 약 24Mbps, 60fps는 상한 40Mbps
+    #expect(ScreenStreamer.bitRate(width: 2388, height: 1668, fps: 30) == 23_899_104)
+    #expect(ScreenStreamer.bitRate(width: 2388, height: 1668, fps: 60) == 40_000_000)
 }
 
-@Test func bitRateIsCappedForWiFi() {
-    // 울트라와이드를 원본 크기로 받아도 와이파이가 버티게 25Mbps에서 멈춘다
-    #expect(ScreenStreamer.bitRate(width: 3440, height: 1440) == 25_000_000)
+@Test func bitRateIsCapped() {
+    #expect(ScreenStreamer.bitRate(width: 3840, height: 2160, fps: 30) == 40_000_000)
 }

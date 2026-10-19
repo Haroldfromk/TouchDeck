@@ -52,30 +52,43 @@ enum DisplayCatalog {
 
 /// 고른 모니터 하나를 찍어서(ScreenCaptureKit) 바로 H.264로 압축한다(VideoToolbox 하드웨어).
 /// 찍기와 압축은 전용 큐 하나에서만 돌고, 묶음이 나오면 onPacket으로 넘긴다.
+/// 맥 전체 소리도 같은 스트림에서 받아 16비트로 바꿔 onAudio로 넘긴다(보낼지는 받는 쪽이 정한다).
 final class ScreenStreamer: NSObject, SCStreamOutput, SCStreamDelegate, @unchecked Sendable {
     let width: Int
     let height: Int
     private let queue = DispatchQueue(label: "touchdeck.screen")
+    private let audioQueue = DispatchQueue(label: "touchdeck.screen.audio")
     private let onPacket: @Sendable (VideoPacket) -> Void
+    private let onAudio: @Sendable (AudioPacket) -> Void
     private let onStop: @Sendable () -> Void
     private var stream: SCStream?
+    /// 보는 중에 fps를 바꿀 때 고쳐서 다시 넘긴다
+    private var config: SCStreamConfiguration?
     // 아래는 queue에서만 만진다
+    private var fps: Int
     private var encoder: VTCompressionSession?
     private var forceKeyframe = true
     /// 화면이 멈춰 있으면 새 프레임이 안 온다. 키프레임을 달라고 하면 마지막 화면을 다시 압축한다
     private var lastFrame: CVPixelBuffer?
 
-    init(width: Int, height: Int, onPacket: @escaping @Sendable (VideoPacket) -> Void, onStop: @escaping @Sendable () -> Void) {
+    // audioQueue에서만 만진다
+    private var warnedAudioFormat = false
+
+    init(width: Int, height: Int, fps: Int, onPacket: @escaping @Sendable (VideoPacket) -> Void,
+         onAudio: @escaping @Sendable (AudioPacket) -> Void, onStop: @escaping @Sendable () -> Void) {
         self.width = width
         self.height = height
+        self.fps = fps
         self.onPacket = onPacket
+        self.onAudio = onAudio
         self.onStop = onStop
     }
 
     enum StartError: Error { case noDisplay }
 
     /// 모니터를 찾아 크기를 정하고 찍기 시작한다. SCDisplay는 여러 스레드에 넘길 수 없어서 찾기부터 여기서 한다.
-    static func start(displayId: CGDirectDisplayID, maxSide: Int, onPacket: @escaping @Sendable (VideoPacket) -> Void,
+    static func start(displayId: CGDirectDisplayID, maxSide: Int, fps: Int, onPacket: @escaping @Sendable (VideoPacket) -> Void,
+                      onAudio: @escaping @Sendable (AudioPacket) -> Void,
                       onStop: @escaping @Sendable () -> Void) async throws -> ScreenStreamer {
         guard let display = try await DisplayCatalog.displays().first(where: { $0.displayID == displayId }) else {
             throw StartError.noDisplay
@@ -84,7 +97,7 @@ final class ScreenStreamer: NSObject, SCStreamOutput, SCStreamDelegate, @uncheck
         let mode = CGDisplayCopyDisplayMode(displayId)
         let pixels = (width: mode?.pixelWidth ?? display.width, height: mode?.pixelHeight ?? display.height)
         let size = ScreenGeometry.fit(width: pixels.width, height: pixels.height, maxSide: maxSide)
-        let streamer = ScreenStreamer(width: size.width, height: size.height, onPacket: onPacket, onStop: onStop)
+        let streamer = ScreenStreamer(width: size.width, height: size.height, fps: fps, onPacket: onPacket, onAudio: onAudio, onStop: onStop)
         try await streamer.start(display: display)
         return streamer
     }
@@ -94,16 +107,39 @@ final class ScreenStreamer: NSObject, SCStreamOutput, SCStreamDelegate, @uncheck
         let config = SCStreamConfiguration()
         config.width = width
         config.height = height
-        config.minimumFrameInterval = CMTime(value: 1, timescale: 30)
+        config.minimumFrameInterval = CMTime(value: 1, timescale: CMTimeScale(fps))
         config.pixelFormat = kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange
         config.showsCursor = true
         config.queueDepth = 4
         // 원본 해상도로 찍은 뒤 줄인다 (기본값은 레티나에서 낮은 해상도로 찍을 수 있다)
         config.captureResolution = .best
+        // 맥 전체 소리. 같은 화면 기록 권한으로 된다. TouchDeck 자신의 소리는 뺀다
+        config.capturesAudio = true
+        config.sampleRate = 48_000
+        config.channelCount = 2
+        config.excludesCurrentProcessAudio = true
         let stream = SCStream(filter: SCContentFilter(display: display, excludingWindows: []), configuration: config, delegate: self)
         try stream.addStreamOutput(self, type: .screen, sampleHandlerQueue: queue)
+        try stream.addStreamOutput(self, type: .audio, sampleHandlerQueue: audioQueue)
         try await stream.startCapture()
         self.stream = stream
+        self.config = config
+    }
+
+    /// 보는 중에 30/60을 바꾼다. 스트림을 다시 만들지 않는다
+    func setFrameRate(_ fps: Int) {
+        guard let stream, let config else { return }
+        config.minimumFrameInterval = CMTime(value: 1, timescale: CMTimeScale(fps))
+        stream.updateConfiguration(config) { error in
+            if let error { print("[screen] fps change failed:", error) }
+        }
+        queue.async {
+            self.fps = fps
+            guard let encoder = self.encoder else { return }
+            VTSessionSetProperty(encoder, key: kVTCompressionPropertyKey_ExpectedFrameRate, value: fps as CFNumber)
+            VTSessionSetProperty(encoder, key: kVTCompressionPropertyKey_AverageBitRate,
+                                 value: Self.bitRate(width: self.width, height: self.height, fps: fps) as CFNumber)
+        }
     }
 
     func stop() {
@@ -126,6 +162,10 @@ final class ScreenStreamer: NSObject, SCStreamOutput, SCStreamDelegate, @uncheck
     // MARK: - SCStreamOutput / SCStreamDelegate (queue에서 불린다)
 
     func stream(_ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer, of type: SCStreamOutputType) {
+        if type == .audio {
+            if let packet = audioPacket(from: sampleBuffer) { onAudio(packet) }
+            return
+        }
         // 화면이 그대로면 "변화 없음" 프레임이 온다. 실제로 그린 프레임만 압축한다
         guard type == .screen, Self.isComplete(sampleBuffer), let frame = sampleBuffer.imageBuffer else { return }
         lastFrame = frame
@@ -152,16 +192,16 @@ final class ScreenStreamer: NSObject, SCStreamOutput, SCStreamDelegate, @uncheck
         VTSessionSetProperty(session, key: kVTCompressionPropertyKey_ProfileLevel, value: kVTProfileLevel_H264_ConstrainedHigh_AutoLevel)
         VTSessionSetProperty(session, key: kVTCompressionPropertyKey_AllowFrameReordering, value: kCFBooleanFalse)
         VTSessionSetProperty(session, key: kVTCompressionPropertyKey_MaxKeyFrameIntervalDuration, value: 2 as CFNumber)
-        VTSessionSetProperty(session, key: kVTCompressionPropertyKey_ExpectedFrameRate, value: 30 as CFNumber)
+        VTSessionSetProperty(session, key: kVTCompressionPropertyKey_ExpectedFrameRate, value: fps as CFNumber)
         VTSessionSetProperty(session, key: kVTCompressionPropertyKey_AverageBitRate,
-                             value: Self.bitRate(width: width, height: height) as CFNumber)
+                             value: Self.bitRate(width: width, height: height, fps: fps) as CFNumber)
         VTCompressionSessionPrepareToEncodeFrames(session)
         encoder = session
     }
 
-    /// 글자가 많은 화면이라 넉넉하게(픽셀당 0.2비트 × 30장). 와이파이가 버티게 25Mbps에서 멈춘다
-    static func bitRate(width: Int, height: Int) -> Int {
-        min(Int(Double(width * height) * 30 * 0.2), 25_000_000)
+    /// 글자가 많은 화면이라 넉넉하게(픽셀당 0.2비트 × 초당 장수). 와이파이가 버티게 40Mbps에서 멈춘다
+    static func bitRate(width: Int, height: Int, fps: Int) -> Int {
+        min(Int(Double(width * height) * Double(fps) * 0.2), 40_000_000)
     }
 
     private func encode(_ frame: CVPixelBuffer) {
@@ -179,6 +219,37 @@ final class ScreenStreamer: NSObject, SCStreamOutput, SCStreamDelegate, @uncheck
             guard status == noErr, let sample, let packet = Self.packet(from: sample) else { return }
             onPacket(packet)
         }
+    }
+
+    /// 맥이 주는 소리(32비트 실수, 보통 채널별로 따로) → 16비트 소리 묶음. 다른 형식이면 버린다
+    private func audioPacket(from sample: CMSampleBuffer) -> AudioPacket? {
+        guard let format = sample.formatDescription,
+              let asbd = CMAudioFormatDescriptionGetStreamBasicDescription(format)?.pointee,
+              asbd.mFormatID == kAudioFormatLinearPCM, asbd.mFormatFlags & kAudioFormatFlagIsFloat != 0,
+              asbd.mBitsPerChannel == 32, asbd.mChannelsPerFrame > 0 else {
+            if !warnedAudioFormat { print("[screen] unsupported audio format") }
+            warnedAudioFormat = true
+            return nil
+        }
+        let channels = Int(asbd.mChannelsPerFrame)
+        let separate = asbd.mFormatFlags & kAudioFormatFlagIsNonInterleaved != 0
+        let planar: [[Float]]? = try? sample.withAudioBufferList { list, _ in
+            if separate {
+                return list.map { buffer in
+                    guard let data = buffer.mData else { return [] }
+                    let count = Int(buffer.mDataByteSize) / MemoryLayout<Float>.size
+                    return Array(UnsafeBufferPointer(start: data.assumingMemoryBound(to: Float.self), count: count))
+                }
+            }
+            guard let buffer = list.first, let data = buffer.mData else { return [] }
+            let all = UnsafeBufferPointer(start: data.assumingMemoryBound(to: Float.self),
+                                          count: Int(buffer.mDataByteSize) / MemoryLayout<Float>.size)
+            return (0..<channels).map { channel in stride(from: channel, to: all.count, by: channels).map { all[$0] } }
+        }
+        guard let planar, !planar.isEmpty else { return nil }
+        let samples = AudioPacket.interleave(planar)
+        guard !samples.isEmpty else { return nil }
+        return AudioPacket(channels: planar.count, sampleRate: Int(asbd.mSampleRate), samples: samples)
     }
 
     private static func isComplete(_ sample: CMSampleBuffer) -> Bool {
