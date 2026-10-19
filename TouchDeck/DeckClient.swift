@@ -42,6 +42,13 @@ final class DeckClient {
     private var volumeTask: Task<Void, Never>?
     private var volumeBeforeMute = 50
 
+    // 이번 접속의 키 교환/서명 상태. 접속이 바뀌면 전부 새로 시작한다.
+    private var clientNonce = ""
+    private var macNonce = ""
+    private var macPairingKey: Data?
+    private var pendingPairing: PairingCrypto.Derived?
+    private var secure: SecureChannel?
+
     var isConnected: Bool {
         if case .connected = phase { return true }
         return false
@@ -63,7 +70,16 @@ final class DeckClient {
     // MARK: - 보내기
 
     func press(page: Int, index: Int) { send(.press(page: page, index: index)) }
-    func submitPairing(code: String) { send(.pair(code: code)) }
+    /// 숫자는 보내지 않는다. 내 임시 키와 맥의 공개 키로 공유 비밀을 계산하고, 숫자를 섞은 증명만 보낸다.
+    func submitPairing(code: String) {
+        guard let macPairingKey else { return }
+        let key = PairingCrypto.newPrivateKey()
+        let mine = key.publicKey.rawRepresentation
+        guard let derived = try? PairingCrypto.derive(privateKey: key, peerPublicKey: macPairingKey, code: code,
+                                                      macPublicKey: macPairingKey, clientPublicKey: mine) else { return }
+        pendingPairing = derived
+        send(.pair(publicKey: mine.base64EncodedString(), proof: derived.clientProof))
+    }
     func setButton(_ button: DeckButton, page: Int, index: Int) { send(.setButton(page: page, index: index, button: button)) }
     func clearButton(page: Int, index: Int) { send(.clearButton(page: page, index: index)) }
 
@@ -89,9 +105,28 @@ final class DeckClient {
         }
     }
 
+    /// 허락받은 뒤에는 서명된 봉투에 넣어 보낸다.
     private func send(_ message: ClientMessage) {
         guard let text = try? message.encoded() else { return }
-        channel?.send(text)
+        if var secure {
+            channel?.send(secure.seal(text))
+            self.secure = secure
+        } else {
+            channel?.send(text)
+        }
+    }
+
+    private func sayHello() {
+        secure = nil
+        pendingPairing = nil
+        clientNonce = SessionKeys.makeNonce()
+        send(.hello(deviceId: KeychainStore.deviceId(), deviceName: UIDevice.current.name, nonce: clientNonce))
+    }
+
+    /// 상대가 증명을 못 했다. 토큰을 모르는 가짜 맥일 수 있으니 끊고 다시 찾는다.
+    private func rejectMac(_ reason: String) {
+        print("[client] rejected Mac:", reason)
+        reconnectLater()
     }
 
     // MARK: - 찾기와 연결
@@ -136,7 +171,7 @@ final class DeckClient {
         print("[client] connection", state)
         switch state {
         case .ready:
-            send(.hello(deviceId: KeychainStore.deviceId(), deviceName: UIDevice.current.name))
+            sayHello()
         case .waiting, .failed, .cancelled:
             reconnectLater()
         default:
@@ -148,6 +183,8 @@ final class DeckClient {
     private func reconnectLater() {
         channel?.cancel()
         channel = nil
+        secure = nil
+        pendingPairing = nil
         if phase != .localNetworkDenied { phase = .searching }
         browser?.cancel()
         browser = nil
@@ -160,30 +197,60 @@ final class DeckClient {
     // MARK: - 받기
 
     private func receive(_ text: String) {
+        // 허락받은 뒤에는 서명이 맞는 봉투만 믿는다
+        if var secure, let body = try? secure.open(text) {
+            self.secure = secure
+            guard let message = try? ServerMessage.decode(body) else { return }
+            handle(message)
+            return
+        }
         guard let message = try? ServerMessage.decode(text) else {
             print("[client] bad message:", text.prefix(200))
             return
         }
         switch message {
-        case .needPairing:
-            KeychainStore.clearToken()
+        case .needPairing, .pairingFailed, .pairingLocked, .paired, .challenge, .unauthorized:
+            handle(message)
+        default:
+            // 서명 없는 버튼 배치나 결과는 무시한다 (중간에서 끼워 넣은 것일 수 있다)
+            print("[client] unsigned message ignored:", text.prefix(80))
+        }
+    }
+
+    private func handle(_ message: ServerMessage) {
+        switch message {
+        case .needPairing(let publicKey, let nonce):
+            // 토큰은 새 페어링이 성공할 때까지 지우지 않는다. 가짜 맥이 needPairing을 보내 허락을 끊는 걸 막기 위해.
+            secure = nil
+            macPairingKey = Data(base64Encoded: publicKey)
+            macNonce = nonce
             phase = .needsPairing(macName)
         case .pairingFailed(let remaining):
             phase = .pairingFailed(macName, remaining: remaining)
         case .pairingLocked:
             phase = .pairingLocked(macName)
-        case .paired(let token):
-            KeychainStore.setToken(token)
-        case .challenge(let nonce):
-            // 토큰이 없으면(앱을 지웠다 깔았을 때) 빈 서명을 보낸다. 맥이 숫자로 다시 허락받게 한다.
-            let token = KeychainStore.token() ?? ""
-            send(.auth(signature: token.isEmpty ? "" : pairingSignature(token: token, nonce: nonce)))
+        case .paired(let proof):
+            // 맥도 같은 숫자를 아는지 확인한 뒤에야 토큰을 저장한다
+            guard let derived = pendingPairing, derived.macProof == proof else { return rejectMac("pairing proof") }
+            KeychainStore.setToken(derived.token.base64EncodedString())
+            pendingPairing = nil
+            secure = SecureChannel(keys: SessionKeys(token: derived.token, clientNonce: clientNonce, macNonce: macNonce), role: .client)
+        case .challenge(let nonce, let proof):
+            macNonce = nonce
+            guard let token = KeychainStore.token().flatMap({ Data(base64Encoded: $0) }) else {
+                // 토큰이 없으면(앱을 지웠다 깔았을 때) 빈 증명을 보낸다. 맥이 숫자로 다시 허락받게 한다.
+                return send(.auth(proof: ""))
+            }
+            let keys = SessionKeys(token: token, clientNonce: clientNonce, macNonce: nonce)
+            // 맥이 먼저 토큰을 안다는 걸 증명해야 내 증명을 보낸다
+            guard keys.macProof == proof else { return rejectMac("challenge proof") }
+            send(.auth(proof: keys.clientProof))
+            secure = SecureChannel(keys: keys, role: .client)
         case .authorized:
             phase = .connected(macName)
         case .unauthorized:
             // 허락 전에 보낸 요청이거나, 맥 메뉴에서 허락을 취소했다. 처음부터 다시 인사한다.
-            // (허락이 취소됐으면 맥이 needPairing을 보내고, 그때 토큰을 지운다)
-            send(.hello(deviceId: KeychainStore.deviceId(), deviceName: UIDevice.current.name))
+            sayHello()
         case .layout(let layout):
             self.layout = layout
         case .apps(let apps):

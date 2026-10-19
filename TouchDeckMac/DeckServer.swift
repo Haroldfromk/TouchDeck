@@ -75,6 +75,7 @@ final class DeckServer {
         saveTrusted()
         for session in sessions where session.deviceId == deviceId {
             session.stage = .awaitingHello
+            session.secure = nil
             session.send(.unauthorized)
         }
         refreshDevices()
@@ -129,6 +130,23 @@ final class DeckServer {
     // MARK: - 메시지
 
     private func handle(_ text: String, from session: ClientSession) {
+        // 허락받은 뒤에는 서명된 봉투만 받는다. 서명이 틀리거나 다시 보낸 메시지면 연결을 끊는다.
+        if session.stage == .authorized {
+            guard var secure = session.secure else { return }
+            do {
+                let body = try secure.open(text)
+                session.secure = secure
+                guard let message = try? ClientMessage.decode(body) else { return }
+                print("[server] <- (봉투)", text.prefix(220))
+                print("[server] <- (서명 확인)", session.deviceName ?? "?", body.prefix(200))
+                handleAuthorized(message, from: session)
+            } catch {
+                print("[server] rejected", error, text.prefix(120))
+                session.channel.cancel()
+            }
+            return
+        }
+
         guard let message = try? ClientMessage.decode(text) else {
             print("[server] bad message:", text.prefix(200))
             return
@@ -136,36 +154,40 @@ final class DeckServer {
         print("[server] <-", session.deviceName ?? "?", text.prefix(200))
 
         switch (session.stage, message) {
-        case (_, .hello(let deviceId, let deviceName)):
+        case (_, .hello(let deviceId, let deviceName, let clientNonce)):
             session.deviceId = deviceId
             session.deviceName = deviceName
-            if authority.isTrusted(deviceId: deviceId) {
-                let nonce = ClientSession.makeNonce()
-                session.stage = .awaitingAuth(nonce: nonce)
-                session.send(.challenge(nonce: nonce))
+            session.clientNonce = clientNonce
+            let macNonce = SessionKeys.makeNonce()
+            session.macNonce = macNonce
+            if let keys = authority.sessionKeys(deviceId: deviceId, clientNonce: clientNonce, macNonce: macNonce) {
+                // 맥이 먼저 "토큰을 안다"는 증명을 보낸다. 토큰을 모르는 가짜 맥은 이걸 못 만든다.
+                session.pendingKeys = keys
+                session.stage = .awaitingAuth
+                session.send(.challenge(nonce: macNonce, proof: keys.macProof))
             } else {
                 beginPairing(session, deviceId: deviceId, deviceName: deviceName)
             }
 
-        case (.awaitingAuth(let nonce), .auth(let signature)):
+        case (.awaitingAuth, .auth(let proof)):
             guard let deviceId = session.deviceId else { return }
-            if authority.verify(deviceId: deviceId, nonce: nonce, signature: signature) {
-                authorize(session)
+            if let keys = session.pendingKeys, keys.clientProof == proof {
+                authorize(session, keys: keys)
             } else {
-                // 서명이 틀리면(기기가 토큰을 잃었거나 가짜) 다시 숫자로 허락받게 한다.
-                // 기존 허락은 지우지 않는다. 남이 내 기기 ID로 틀린 서명을 보내 허락을 끊는 걸 막기 위해.
+                // 증명이 틀리면(기기가 토큰을 잃었거나 가짜) 다시 숫자로 허락받게 한다.
+                // 기존 허락은 지우지 않는다. 남이 내 기기 ID로 틀린 증명을 보내 허락을 끊는 걸 막기 위해.
                 beginPairing(session, deviceId: deviceId, deviceName: session.deviceName ?? "새 기기")
             }
 
-        case (.awaitingPairing, .pair(let code)):
-            guard let deviceId = session.deviceId else { return }
-            switch authority.submit(code: code, deviceId: deviceId) {
-            case .paired(let token):
+        case (.awaitingPairing, .pair(let publicKey, let proof)):
+            guard let deviceId = session.deviceId, let clientNonce = session.clientNonce, let macNonce = session.macNonce else { return }
+            switch authority.submit(clientPublicKey: Data(base64Encoded: publicKey) ?? Data(), proof: proof, deviceId: deviceId) {
+            case .paired(let token, let macProof):
                 pairingCode = nil
                 pairingDeviceName = nil
                 saveTrusted()
-                session.send(.paired(token: token))
-                authorize(session)
+                session.send(.paired(proof: macProof))
+                authorize(session, keys: SessionKeys(token: token, clientNonce: clientNonce, macNonce: macNonce))
             case .wrong(let remaining):
                 session.send(.pairingFailed(remaining: remaining))
             case .locked:
@@ -175,9 +197,6 @@ final class DeckServer {
                 beginPairing(session, deviceId: deviceId, deviceName: session.deviceName ?? "새 기기")
             }
 
-        case (.authorized, _):
-            handleAuthorized(message, from: session)
-
         default:
             session.send(.unauthorized)
         }
@@ -185,13 +204,15 @@ final class DeckServer {
 
     private func beginPairing(_ session: ClientSession, deviceId: String, deviceName: String) {
         session.stage = .awaitingPairing
-        guard let code = authority.beginPairing(deviceId: deviceId, deviceName: deviceName) else {
+        session.pendingKeys = nil
+        guard let offer = authority.beginPairing(deviceId: deviceId, deviceName: deviceName) else {
             lockPairing(session)
             return
         }
-        pairingCode = code
+        pairingCode = offer.code
         pairingDeviceName = deviceName
-        session.send(.needPairing)
+        // 숫자는 메뉴바에만 보인다. 기기에는 맥의 임시 공개 키만 보낸다.
+        session.send(.needPairing(publicKey: offer.publicKey.base64EncodedString(), nonce: session.macNonce ?? ""))
     }
 
     /// 틀린 횟수를 다 썼다. 해롤드가 메뉴에서 풀기 전까지 어떤 기기도 숫자를 받을 수 없다.
@@ -202,7 +223,10 @@ final class DeckServer {
         session.send(.pairingLocked)
     }
 
-    private func authorize(_ session: ClientSession) {
+    /// 여기서부터 이 접속의 모든 메시지는 서명된 봉투로 오간다.
+    private func authorize(_ session: ClientSession, keys: SessionKeys) {
+        session.secure = SecureChannel(keys: keys, role: .mac)
+        session.pendingKeys = nil
         session.stage = .authorized
         session.send(.authorized)
         session.send(.layout(config.layout))

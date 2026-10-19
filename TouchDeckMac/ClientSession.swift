@@ -7,7 +7,7 @@ import Network
 final class ClientSession: Identifiable {
     enum Stage: Equatable {
         case awaitingHello
-        case awaitingAuth(nonce: String)
+        case awaitingAuth
         case awaitingPairing
         case authorized
     }
@@ -17,6 +17,12 @@ final class ClientSession: Identifiable {
     var stage: Stage = .awaitingHello
     var deviceId: String?
     var deviceName: String?
+    var clientNonce: String?
+    var macNonce: String?
+    /// challenge를 보낸 뒤 기기의 증명을 기다리는 동안의 키
+    var pendingKeys: SessionKeys?
+    /// 허락받은 뒤의 서명 봉투. 있으면 모든 메시지를 여기에 넣어 보낸다.
+    var secure: SecureChannel?
 
     init(channel: WebSocketChannel) {
         self.channel = channel
@@ -24,11 +30,11 @@ final class ClientSession: Identifiable {
 
     func send(_ message: ServerMessage) {
         guard let text = try? message.encoded() else { return }
-        channel.send(text)
-    }
-
-    static func makeNonce() -> String {
-        var rng = SystemRandomNumberGenerator()
-        return (0..<16).map { _ in String(format: "%02x", UInt8.random(in: 0...255, using: &rng)) }.joined()
+        if var secure {
+            channel.send(secure.seal(text))
+            self.secure = secure
+        } else {
+            channel.send(text)
+        }
     }
 }

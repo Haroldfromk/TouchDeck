@@ -14,10 +14,12 @@ public struct AppInfo: Codable, Equatable, Hashable, Sendable {
 }
 
 /// 기기(아이패드, 아이폰, 나중에 ESP32) → 맥
+/// 허락받기 전에는 hello, pair, auth만 그대로 보낸다. 나머지는 SecureChannel 봉투에 넣어 보낸다.
 public enum ClientMessage: Equatable, Sendable {
-    case hello(deviceId: String, deviceName: String)
-    case pair(code: String)
-    case auth(signature: String)
+    case hello(deviceId: String, deviceName: String, nonce: String)
+    /// 숫자는 보내지 않는다. 기기의 임시 공개 키(base64)와 "같은 숫자를 안다"는 증명만 보낸다.
+    case pair(publicKey: String, proof: String)
+    case auth(proof: String)
     case press(page: Int, index: Int)
     case getApps
     case setButton(page: Int, index: Int, button: DeckButton)
@@ -26,13 +28,17 @@ public enum ClientMessage: Equatable, Sendable {
 }
 
 /// 맥 → 기기
+/// 허락 전 메시지(needPairing ~ unauthorized)는 그대로, 나머지는 SecureChannel 봉투에 넣어 보낸다.
 public enum ServerMessage: Equatable, Sendable {
-    case needPairing
+    /// 맥의 임시 공개 키(base64)와 맥 쪽 nonce
+    case needPairing(publicKey: String, nonce: String)
     case pairingFailed(remaining: Int)
     /// 틀린 횟수를 다 써서 잠김. 맥 메뉴에서 풀어야 한다.
     case pairingLocked
-    case paired(token: String)
-    case challenge(nonce: String)
+    /// 토큰은 보내지 않는다. 맥도 같은 숫자를 안다는 증명만 보낸다.
+    case paired(proof: String)
+    /// 맥 쪽 nonce와 "맥이 토큰을 안다"는 증명
+    case challenge(nonce: String, proof: String)
     case authorized
     case unauthorized
     case layout(DeckLayout)
@@ -44,8 +50,8 @@ public enum ServerMessage: Equatable, Sendable {
 
 /// 모든 메시지가 쓰는 JSON 키. 최상위 `type`으로 종류를 나눈다.
 private enum Key: String, CodingKey {
-    case type, deviceId, deviceName, code, signature, page, index, button, value
-    case remaining, token, nonce, pages, items, ok, message, muted, available
+    case type, deviceId, deviceName, publicKey, proof, page, index, button, value
+    case remaining, nonce, pages, items, ok, message, muted, available
 }
 
 extension ClientMessage: Codable {
@@ -54,9 +60,11 @@ extension ClientMessage: Codable {
         switch try c.decode(String.self, forKey: .type) {
         case "hello":
             self = .hello(deviceId: try c.decode(String.self, forKey: .deviceId),
-                          deviceName: try c.decode(String.self, forKey: .deviceName))
-        case "pair": self = .pair(code: try c.decode(String.self, forKey: .code))
-        case "auth": self = .auth(signature: try c.decode(String.self, forKey: .signature))
+                          deviceName: try c.decode(String.self, forKey: .deviceName),
+                          nonce: try c.decode(String.self, forKey: .nonce))
+        case "pair":
+            self = .pair(publicKey: try c.decode(String.self, forKey: .publicKey), proof: try c.decode(String.self, forKey: .proof))
+        case "auth": self = .auth(proof: try c.decode(String.self, forKey: .proof))
         case "press":
             self = .press(page: try c.decode(Int.self, forKey: .page), index: try c.decode(Int.self, forKey: .index))
         case "getApps": self = .getApps
@@ -75,16 +83,18 @@ extension ClientMessage: Codable {
     public func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: Key.self)
         switch self {
-        case .hello(let deviceId, let deviceName):
+        case .hello(let deviceId, let deviceName, let nonce):
             try c.encode("hello", forKey: .type)
             try c.encode(deviceId, forKey: .deviceId)
             try c.encode(deviceName, forKey: .deviceName)
-        case .pair(let code):
+            try c.encode(nonce, forKey: .nonce)
+        case .pair(let publicKey, let proof):
             try c.encode("pair", forKey: .type)
-            try c.encode(code, forKey: .code)
-        case .auth(let signature):
+            try c.encode(publicKey, forKey: .publicKey)
+            try c.encode(proof, forKey: .proof)
+        case .auth(let proof):
             try c.encode("auth", forKey: .type)
-            try c.encode(signature, forKey: .signature)
+            try c.encode(proof, forKey: .proof)
         case .press(let page, let index):
             try c.encode("press", forKey: .type)
             try c.encode(page, forKey: .page)
@@ -111,11 +121,13 @@ extension ServerMessage: Codable {
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: Key.self)
         switch try c.decode(String.self, forKey: .type) {
-        case "needPairing": self = .needPairing
+        case "needPairing":
+            self = .needPairing(publicKey: try c.decode(String.self, forKey: .publicKey), nonce: try c.decode(String.self, forKey: .nonce))
         case "pairingLocked": self = .pairingLocked
         case "pairingFailed": self = .pairingFailed(remaining: try c.decode(Int.self, forKey: .remaining))
-        case "paired": self = .paired(token: try c.decode(String.self, forKey: .token))
-        case "challenge": self = .challenge(nonce: try c.decode(String.self, forKey: .nonce))
+        case "paired": self = .paired(proof: try c.decode(String.self, forKey: .proof))
+        case "challenge":
+            self = .challenge(nonce: try c.decode(String.self, forKey: .nonce), proof: try c.decode(String.self, forKey: .proof))
         case "authorized": self = .authorized
         case "unauthorized": self = .unauthorized
         case "layout": self = .layout(DeckLayout(pages: try c.decode([DeckPage].self, forKey: .pages)))
@@ -136,19 +148,22 @@ extension ServerMessage: Codable {
     public func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: Key.self)
         switch self {
-        case .needPairing:
+        case .needPairing(let publicKey, let nonce):
             try c.encode("needPairing", forKey: .type)
+            try c.encode(publicKey, forKey: .publicKey)
+            try c.encode(nonce, forKey: .nonce)
         case .pairingLocked:
             try c.encode("pairingLocked", forKey: .type)
         case .pairingFailed(let remaining):
             try c.encode("pairingFailed", forKey: .type)
             try c.encode(remaining, forKey: .remaining)
-        case .paired(let token):
+        case .paired(let proof):
             try c.encode("paired", forKey: .type)
-            try c.encode(token, forKey: .token)
-        case .challenge(let nonce):
+            try c.encode(proof, forKey: .proof)
+        case .challenge(let nonce, let proof):
             try c.encode("challenge", forKey: .type)
             try c.encode(nonce, forKey: .nonce)
+            try c.encode(proof, forKey: .proof)
         case .authorized:
             try c.encode("authorized", forKey: .type)
         case .unauthorized:

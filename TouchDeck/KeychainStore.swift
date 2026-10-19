@@ -14,7 +14,6 @@ enum KeychainStore {
 
     static func token() -> String? { read("token") }
     static func setToken(_ token: String) { write("token", token) }
-    static func clearToken() { delete("token") }
 
     private static func query(_ account: String) -> [String: Any] {
         [kSecClass as String: kSecClassGenericPassword,

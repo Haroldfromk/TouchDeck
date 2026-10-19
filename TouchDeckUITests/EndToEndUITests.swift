@@ -44,6 +44,18 @@ final class EndToEndUITests: XCTestCase {
         app.buttons["취소"].tap()
     }
 
+    /// 키 교환으로 페어링하고, 서명된 메시지로 버튼 추가와 누르기가 되는지
+    func testSignedSession() {
+        XCUIDevice.shared.orientation = .landscapeLeft
+        app.launch()
+        pairIfNeeded(shot: "14-pairing-keyexchange")
+        waitForConnected()
+        addApp(named: "Finder")
+        key("Finder").tap()
+        sleep(2)
+        shot("15-signed-session")
+    }
+
     /// 2페이지까지 버튼이 채워진 뒤(스크립트로 채움) 옆으로 넘겨 본다.
     func testSecondPage() {
         XCUIDevice.shared.orientation = .landscapeLeft
