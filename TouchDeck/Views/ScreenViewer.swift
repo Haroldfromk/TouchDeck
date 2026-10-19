@@ -5,7 +5,8 @@ import UIKit
 /// 맥 화면 전체 보기. 탭=클릭, 두 손가락 탭=우클릭, 한 손가락 쓸기=스크롤,
 /// 두 손가락 쓸기=원래 크기면 스크롤, 확대 중이면 보는 위치 옮기기,
 /// 길게 눌렀다 끌기=드래그(블록 선택, 창 옮기기), 핀치=이 화면만 확대.
-/// 키보드 버튼을 누르면 아래에 입력칸이 열리고, 맥 화면은 키보드 위 남은 자리로 줄어든다.
+/// 키보드 버튼을 누르면 아래에 입력칸이 열린다. 맥 화면은 크기를 그대로 두고 입력칸과 키보드가 아래를 덮는데,
+/// 그동안은 1배에서도 두 손가락으로 덮인 높이만큼 밀어 올려 가려진 아래쪽(클로드 코드 입력 줄 등)을 볼 수 있다.
 struct ScreenViewer: View {
     let client: DeckClient
     let display: DisplayInfo
@@ -16,6 +17,9 @@ struct ScreenViewer: View {
     @State private var offset: CGSize = .zero
     @State private var showInput = false
     @State private var showUpdateNotice = false
+    /// 영상 자리와 입력칸 윗변(화면 전체 기준). 둘로 입력칸과 키보드가 덮은 높이를 잰다
+    @State private var contentFrame = CGRect.zero
+    @State private var barTop: CGFloat?
     @Environment(\.scenePhase) private var scenePhase
     /// 아이폰 세로처럼 좁으면 툴바 버튼은 아이콘만 (글자까지 넣으면 화면 밖으로 넘친다)
     @Environment(\.horizontalSizeClass) private var sizeClass
@@ -24,22 +28,31 @@ struct ScreenViewer: View {
         client.screenStream.flatMap { $0.displayId == display.id ? $0 : nil }
     }
 
+    /// 입력칸과 키보드가 맥 화면 아래를 덮은 높이. 입력칸이 닫혀 있으면 0
+    private var covered: CGFloat {
+        guard showInput, let barTop else { return 0 }
+        return max(0, contentFrame.maxY - barTop)
+    }
+
     var body: some View {
-        // 바깥 VStack은 키보드 자리를 비워 둔다. 입력칸이 열리면 영상은 키보드와 입력칸 위로 줄어든다
-        VStack(spacing: 0) {
+        // 바깥 ZStack은 키보드 자리를 비워 둬서 입력칸이 키보드 바로 위에 붙는다.
+        // 영상은 키보드 자리까지 무시해서 키보드가 올라와도 줄어들지 않는다
+        ZStack(alignment: .bottom) {
             content
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                // 영상만 화면 끝까지 (툴바와 입력칸은 안전 영역 안에 둔다)
-                .ignoresSafeArea(.container)
-                // 입력칸이 열려 영상 자리가 줄면 보는 위치를 새 크기 안으로 맞춘다
-                .onGeometryChange(for: CGSize.self) { $0.size } action: { size in
-                    offset = ScreenGeometry.clampOffset(offset, zoom: zoom, view: size)
-                }
+                .ignoresSafeArea()
+                .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { contentFrame = $0 }
                 .overlay(alignment: .bottom) { inputBanner }
             if showInput && stream != nil {
                 RemoteInputBar(client: client)
+                    .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).minY } action: { barTop = $0 }
             }
         }
+        // 키보드를 내리거나 입력칸을 닫으면 밀어 올렸던 화면을 제자리로
+        .onChange(of: covered) { _, now in
+            offset = ScreenGeometry.clampOffset(offset, zoom: zoom, view: contentFrame.size, covered: now)
+        }
+        .onChange(of: showInput) { _, open in if !open { barTop = nil } }
         .overlay(alignment: .topTrailing) { toolbar }
         .background(Color.black.ignoresSafeArea())
         .alert("맥 TouchDeck을 새 버전으로 설치해 주세요", isPresented: $showUpdateNotice) {
@@ -64,7 +77,7 @@ struct ScreenViewer: View {
         ZStack {
             if let stream {
                 VideoSurface(client: client, video: CGSize(width: stream.width, height: stream.height),
-                             macWidth: CGFloat(display.width), zoom: $zoom, offset: $offset)
+                             macWidth: CGFloat(display.width), covered: covered, zoom: $zoom, offset: $offset)
             } else if let notice = client.screenNotice, let text = ScreenPickerView.text(for: notice) {
                 Label(text, systemImage: "exclamationmark.circle.fill")
                     .font(.callout.weight(.medium))
@@ -144,6 +157,8 @@ private struct VideoSurface: UIViewRepresentable {
     let video: CGSize
     /// 맥 모니터 너비(포인트). 스크롤 양을 맥 기준으로 바꿀 때 쓴다
     let macWidth: CGFloat
+    /// 입력칸과 키보드가 덮은 높이. 이만큼은 1배에서도 위로 밀어 올릴 수 있다
+    let covered: CGFloat
     @Binding var zoom: CGFloat
     @Binding var offset: CGSize
 
@@ -342,11 +357,11 @@ private struct VideoSurface: UIViewRepresentable {
                 pinchScale = 1
             case .changed:
                 pinchScale = g.scale
-                twoFinger = TwoFinger.decide(twoFinger, scale: g.scale, moved: 0, zoom: parent.zoom)
+                twoFinger = TwoFinger.decide(twoFinger, scale: g.scale, moved: 0, zoom: parent.zoom, covered: parent.covered)
                 guard twoFinger == .zoom, let view else { return }
                 let zoom = min(max(pinchStartZoom * g.scale, 1), 4)
                 parent.zoom = zoom
-                parent.offset = ScreenGeometry.clampOffset(parent.offset, zoom: zoom, view: view.bounds.size)
+                parent.offset = ScreenGeometry.clampOffset(parent.offset, zoom: zoom, view: view.bounds.size, covered: parent.covered)
             default:
                 break
             }
@@ -362,14 +377,15 @@ private struct VideoSurface: UIViewRepresentable {
             case .changed:
                 let delta = CGPoint(x: t.x - lastPanTranslation.x, y: t.y - lastPanTranslation.y)
                 lastPanTranslation = t
-                twoFinger = TwoFinger.decide(twoFinger, scale: pinchScale, moved: hypot(t.x, t.y), zoom: parent.zoom)
+                twoFinger = TwoFinger.decide(twoFinger, scale: pinchScale, moved: hypot(t.x, t.y), zoom: parent.zoom,
+                                             covered: parent.covered)
                 switch twoFinger {
                 case .zoom, .pan:
                     // 확대하면서 손가락을 옮기거나, 확대된 화면을 두 손가락으로 쓸면 보는 위치가 따라 움직인다
                     guard let view else { return }
                     parent.offset = ScreenGeometry.clampOffset(
                         CGSize(width: parent.offset.width + delta.x, height: parent.offset.height + delta.y),
-                        zoom: parent.zoom, view: view.bounds.size)
+                        zoom: parent.zoom, view: view.bounds.size, covered: parent.covered)
                 case .scroll:
                     pendingScroll.x += delta.x
                     pendingScroll.y += delta.y

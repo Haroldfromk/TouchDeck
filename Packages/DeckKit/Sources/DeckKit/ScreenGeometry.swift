@@ -26,10 +26,12 @@ public enum ScreenGeometry {
     }
 
     /// 확대한 영상이 화면 밖으로 밀려나 빈 곳이 보이지 않게 옮길 수 있는 만큼만.
-    public static func clampOffset(_ offset: CGSize, zoom: CGFloat, view: CGSize) -> CGSize {
+    /// covered: 화면 아래를 덮은 높이(입력칸과 키보드). 그만큼은 1배에서도 위로 밀어 올려 가려진 아래쪽을 볼 수 있다
+    public static func clampOffset(_ offset: CGSize, zoom: CGFloat, view: CGSize, covered: CGFloat = 0) -> CGSize {
         let maxX = max(0, view.width * (zoom - 1) / 2)
         let maxY = max(0, view.height * (zoom - 1) / 2)
-        return CGSize(width: min(max(offset.width, -maxX), maxX), height: min(max(offset.height, -maxY), maxY))
+        let minY = -maxY - max(0, covered)
+        return CGSize(width: min(max(offset.width, -maxX), maxX), height: min(max(offset.height, minY), maxY))
     }
 
     /// 영상 안 0~1 → 맥 전체 좌표(포인트). display는 CGDisplayBounds 값이라 왼쪽/위 모니터는 음수에서 시작한다.
@@ -61,11 +63,12 @@ public enum TwoFinger: Equatable, Sendable {
     public static let zoomScale: CGFloat = 0.08
     public static let moveDistance: CGFloat = 12
 
-    /// scale: 핀치 배율(1이 그대로), moved: 닿은 뒤 움직인 거리(pt), zoom: 지금 확대 배율
-    public static func decide(_ current: TwoFinger, scale: CGFloat, moved: CGFloat, zoom: CGFloat) -> TwoFinger {
+    /// scale: 핀치 배율(1이 그대로), moved: 닿은 뒤 움직인 거리(pt), zoom: 지금 확대 배율,
+    /// covered: 키보드와 입력칸이 덮은 높이. 덮여 있으면 1배여도 쓸기는 보는 위치 옮기기다
+    public static func decide(_ current: TwoFinger, scale: CGFloat, moved: CGFloat, zoom: CGFloat, covered: CGFloat = 0) -> TwoFinger {
         guard current == .undecided else { return current }
         if abs(scale - 1) > zoomScale { return .zoom }
-        if moved > moveDistance { return zoom > 1.01 ? .pan : .scroll }
+        if moved > moveDistance { return zoom > 1.01 || covered > 0 ? .pan : .scroll }
         return .undecided
     }
 }

@@ -135,3 +135,23 @@ import Testing
     #expect(TwoFinger.decide(.scroll, scale: 1.3, moved: 40, zoom: 1) == .scroll)
     #expect(TwoFinger.decide(.pan, scale: 1.3, moved: 40, zoom: 2) == .pan)
 }
+
+// MARK: - 키보드가 덮은 만큼 밀어 올리기
+
+@Test func coveredBottomLetsViewMoveUpAtNormalSize() {
+    let view = CGSize(width: 1000, height: 800)
+    // 1배에서도 가려진 높이(300)까지는 위로 올라간다. 아래로는 안 내려간다
+    #expect(ScreenGeometry.clampOffset(CGSize(width: 0, height: -500), zoom: 1, view: view, covered: 300) == CGSize(width: 0, height: -300))
+    #expect(ScreenGeometry.clampOffset(CGSize(width: 40, height: 100), zoom: 1, view: view, covered: 300) == .zero)
+}
+
+@Test func coveredAddsToZoomedRange() {
+    let view = CGSize(width: 1000, height: 800)
+    #expect(ScreenGeometry.clampOffset(CGSize(width: 0, height: -900), zoom: 2, view: view, covered: 300) == CGSize(width: 0, height: -700))
+    #expect(ScreenGeometry.clampOffset(CGSize(width: 0, height: 900), zoom: 2, view: view, covered: 300) == CGSize(width: 0, height: 400))
+}
+
+@Test func swipeAtNormalSizeMovesViewWhenBottomIsCovered() {
+    #expect(TwoFinger.decide(.undecided, scale: 1, moved: 13, zoom: 1, covered: 300) == .pan)
+    #expect(TwoFinger.decide(.undecided, scale: 1, moved: 13, zoom: 1, covered: 0) == .scroll)
+}

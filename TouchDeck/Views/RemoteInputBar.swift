@@ -15,6 +15,8 @@ struct RemoteInputBar: View {
         let spoken: String
         /// 길게 누르면 뗄 때까지 계속 보낸다 (⌫)
         var repeats = false
+        /// 글자 대신 크게 그릴 아이콘. "⌫" 글자는 작아서 잘 안 보인다
+        var symbol: String?
     }
 
     private static let keys: [KeyItem] = [
@@ -26,7 +28,7 @@ struct RemoteInputBar: View {
         KeyItem(key: .left, label: "←", spoken: "왼쪽"),
         KeyItem(key: .right, label: "→", spoken: "오른쪽"),
         KeyItem(key: .selectAll, label: "⌘A", spoken: "전체 선택"),
-        KeyItem(key: .delete, label: "⌫", spoken: "지우기", repeats: true),
+        KeyItem(key: .delete, label: "⌫", spoken: "지우기", repeats: true, symbol: "delete.left.fill"),
         KeyItem(key: .controlC, label: "⌃C", spoken: "컨트롤 C"),
         KeyItem(key: .enter, label: "⏎", spoken: "엔터"),
     ]
@@ -104,13 +106,21 @@ private struct KeyButton: View {
     }
 
     private var label: some View {
-        Text(item.label)
-            .font(.callout.weight(.semibold).monospaced())
-            .frame(minWidth: 44, minHeight: 36)
-            .padding(.horizontal, 6)
-            .background(DeckTheme.socket.opacity(pressing ? 0.6 : 1), in: .rect(cornerRadius: 8))
-            .foregroundStyle(DeckTheme.legend)
-            .contentShape(.rect)
+        Group {
+            if let symbol = item.symbol {
+                Image(systemName: symbol)
+                    .font(.title3.weight(.semibold))
+                    .frame(minWidth: 60)
+            } else {
+                Text(item.label)
+                    .font(.callout.weight(.semibold).monospaced())
+            }
+        }
+        .frame(minWidth: 44, minHeight: 36)
+        .padding(.horizontal, 6)
+        .background(DeckTheme.socket.opacity(pressing ? 0.6 : 1), in: .rect(cornerRadius: 8))
+        .foregroundStyle(DeckTheme.legend)
+        .contentShape(.rect)
     }
 
     /// 누르자마자 한 번, 0.4초 뒤부터 0.08초마다
