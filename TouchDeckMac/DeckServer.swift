@@ -12,6 +12,8 @@ protocol DeckActions {
     func setVolume(_ value: Int) async
     /// 볼륨 키 신호를 보낸다. 권한이 없어서 못 보냈으면 false
     func pressVolumeKey(_ key: VolumeKey) async -> Bool
+    /// 키패드 키를 앞에 떠 있는 앱에 입력한다. 권한이 없어서 못 보냈으면 false
+    func typeKey(_ key: TypedKey) async -> Bool
 }
 
 /// NWListener 하나로 WebSocket 서버와 Bonjour 광고를 같이 한다.
@@ -142,8 +144,11 @@ final class DeckServer {
                 let body = try secure.open(text)
                 session.secure = secure
                 guard let message = try? ClientMessage.decode(body) else { return }
-                print("[server] <- (봉투)", text.prefix(220))
-                print("[server] <- (서명 확인)", session.deviceName ?? "?", body.prefix(200))
+                // 키패드로 친 키(비밀번호일 수 있다)는 로그에 남기지 않는다
+                if case .typeKey = message {} else {
+                    print("[server] <- (봉투)", text.prefix(220))
+                    print("[server] <- (암호 풀림)", session.deviceName ?? "?", body.prefix(200))
+                }
                 handleAuthorized(message, from: session)
             } catch {
                 print("[server] rejected", error, text.prefix(120))
@@ -280,6 +285,9 @@ final class DeckServer {
                 try? await Task.sleep(for: .milliseconds(150))
                 await broadcastVolume()
             }
+
+        case .typeKey(let key):
+            Task { _ = await actions.typeKey(key) }
 
         case .hello, .pair, .auth:
             break

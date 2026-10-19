@@ -43,6 +43,7 @@ import Testing
     let all: [ClientMessage] = [
         .hello(deviceId: "d", deviceName: "Harold의 iPad", nonce: "c1"), .pair(publicKey: "cHVi", proof: "ab"), .auth(proof: "ab"),
         .getApps, .clearButton(page: 0, index: 0), .volumeKey(.up), .volumeKey(.down), .volumeKey(.mute),
+        .typeKey(.digit(0)), .typeKey(.digit(7)), .typeKey(.tab), .typeKey(.delete), .typeKey(.enter),
     ]
     for m in all { #expect(try ClientMessage.decode(m.encoded()) == m) }
 }
@@ -64,4 +65,14 @@ import Testing
 @Test func volumeKeyShape() throws {
     // 해피해킹 볼륨 키처럼 "올림/내림/음소거"만 보낸다. 지금 몇 %인지는 몰라도 된다.
     #expect(try ClientMessage.volumeKey(.up).encoded() == #"{"key":"up","type":"volumeKey"}"#)
+}
+
+@Test func typeKeyShape() throws {
+    #expect(try ClientMessage.typeKey(.digit(7)).encoded() == #"{"key":"7","type":"typeKey"}"#)
+    #expect(try ClientMessage.typeKey(.enter).encoded() == #"{"key":"enter","type":"typeKey"}"#)
+}
+
+@Test func typeKeyRejectsUnknownKey() {
+    #expect(throws: (any Error).self) { try ClientMessage.decode(#"{"key":"a","type":"typeKey"}"#) }
+    #expect(throws: (any Error).self) { try ClientMessage.decode(#"{"key":"10","type":"typeKey"}"#) }
 }

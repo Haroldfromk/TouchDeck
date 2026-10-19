@@ -71,12 +71,33 @@ private func pair() -> (ipad: SecureChannel, mac: SecureChannel) {
     #expect(try ipad.open(back) == #"{"type":"authorized"}"#)
 }
 
-@Test func tamperedBodyIsRejected() throws {
+@Test func sealedMessageHidesBody() throws {
+    // 비밀번호 숫자가 와이파이로 그대로 보이면 안 된다. 봉투 안에 원래 글자가 없어야 한다
+    var (ipad, _) = pair()
+    let sealed = ipad.seal(#"{"key":"7","type":"typeKey"}"#)
+    #expect(!sealed.contains("typeKey"))
+    #expect(!sealed.contains("\"7\""))
+    #expect(sealed.contains(#""type":"secure""#))
+}
+
+@Test func tamperedBoxIsRejected() throws {
     var (ipad, mac) = pair()
     let sealed = ipad.seal(#"{"type":"press","page":0,"index":3}"#)
-    let tampered = sealed.replacingOccurrences(of: #"\"index\":3"#, with: #"\"index\":4"#)
-    #expect(tampered != sealed)
-    #expect(throws: SecureChannel.OpenError.badSignature) { try mac.open(tampered) }
+    // 암호문 한 글자 바꾸기
+    let range = try #require(sealed.range(of: #""box":""#))
+    var chars = Array(sealed)
+    let i = sealed.distance(from: sealed.startIndex, to: range.upperBound) + 5
+    chars[i] = chars[i] == "A" ? "B" : "A"
+    #expect(throws: SecureChannel.OpenError.badSignature) { try mac.open(String(chars)) }
+}
+
+@Test func changedSeqIsRejected() throws {
+    // 번호도 암호화에 묶여 있어서, 번호만 바꿔 다시 보내도 안 열린다
+    var (ipad, mac) = pair()
+    let sealed = ipad.seal(#"{"type":"getApps"}"#)
+    _ = try mac.open(sealed)
+    let bumped = sealed.replacingOccurrences(of: #""seq":1"#, with: #""seq":2"#)
+    #expect(throws: SecureChannel.OpenError.badSignature) { try mac.open(bumped) }
 }
 
 @Test func replayedMessageIsRejected() throws {

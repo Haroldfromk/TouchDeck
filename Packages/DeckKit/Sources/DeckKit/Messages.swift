@@ -19,6 +19,37 @@ public enum VolumeKey: String, Codable, Sendable {
     case up, down, mute
 }
 
+/// 숫자 키패드의 키. 맥에서 앞에 떠 있는 앱에 이 키를 누른 것처럼 입력한다.
+/// JSON에서는 "0"~"9", "tab", "delete", "enter" 글자 하나로 보낸다.
+public enum TypedKey: Equatable, Hashable, Sendable, Codable {
+    case digit(Int)
+    case tab, delete, enter
+
+    public init(from decoder: Decoder) throws {
+        let text = try decoder.singleValueContainer().decode(String.self)
+        switch text {
+        case "tab": self = .tab
+        case "delete": self = .delete
+        case "enter": self = .enter
+        default:
+            guard text.count == 1, let digit = Int(text) else {
+                throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath, debugDescription: "unknown key \(text)"))
+            }
+            self = .digit(digit)
+        }
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.singleValueContainer()
+        switch self {
+        case .digit(let d): try c.encode(String(d))
+        case .tab: try c.encode("tab")
+        case .delete: try c.encode("delete")
+        case .enter: try c.encode("enter")
+        }
+    }
+}
+
 /// 허락받기 전에는 hello, pair, auth만 그대로 보낸다. 나머지는 SecureChannel 봉투에 넣어 보낸다.
 public enum ClientMessage: Equatable, Sendable {
     case hello(deviceId: String, deviceName: String, nonce: String)
@@ -31,6 +62,7 @@ public enum ClientMessage: Equatable, Sendable {
     case clearButton(page: Int, index: Int)
     case setVolume(Int)
     case volumeKey(VolumeKey)
+    case typeKey(TypedKey)
 }
 
 /// 맥 → 기기
@@ -83,6 +115,7 @@ extension ClientMessage: Codable {
             self = .clearButton(page: try c.decode(Int.self, forKey: .page), index: try c.decode(Int.self, forKey: .index))
         case "setVolume": self = .setVolume(try c.decode(Int.self, forKey: .value))
         case "volumeKey": self = .volumeKey(try c.decode(VolumeKey.self, forKey: .key))
+        case "typeKey": self = .typeKey(try c.decode(TypedKey.self, forKey: .key))
         case let other:
             throw DecodingError.dataCorruptedError(forKey: .type, in: c, debugDescription: "unknown type \(other)")
         }
@@ -123,6 +156,9 @@ extension ClientMessage: Codable {
             try c.encode(value, forKey: .value)
         case .volumeKey(let key):
             try c.encode("volumeKey", forKey: .type)
+            try c.encode(key, forKey: .key)
+        case .typeKey(let key):
+            try c.encode("typeKey", forKey: .type)
             try c.encode(key, forKey: .key)
         }
     }

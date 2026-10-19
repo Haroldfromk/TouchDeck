@@ -106,6 +106,9 @@ final class DeckClient {
     /// 키보드 볼륨 키처럼 올림/내림/음소거만 보낸다. 맥이 같은 신호를 내서 macOS나 BetterDisplay가 받는다.
     func pressVolumeKey(_ key: VolumeKey) { send(.volumeKey(key)) }
 
+    /// 숫자 키패드. 맥에서 앞에 떠 있는 앱에 이 키를 누른 것처럼 입력된다. 친 키는 기억하지 않는다.
+    func typeKey(_ key: TypedKey) { send(.typeKey(key)) }
+
     /// 허락받은 뒤에는 서명된 봉투에 넣어 보낸다.
     private func send(_ message: ClientMessage) {
         guard let text = try? message.encoded() else { return }

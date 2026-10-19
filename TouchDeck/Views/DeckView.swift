@@ -15,20 +15,34 @@ struct DeckView: View {
     @State private var page = 0
     @State private var editing: EditTarget?
     @State private var failure: DeckClient.PressFeedback?
+    /// 스트림덱 / 숫자 키패드. 마지막에 고른 화면을 기억한다
+    @AppStorage("screen") private var screen = Screen.deck
+
+    enum Screen: String, CaseIterable {
+        case deck = "스트림덱"
+        case keypad = "숫자 키패드"
+    }
 
     var body: some View {
         GeometryReader { geo in
             let landscape = geo.size.width > geo.size.height
             VStack(spacing: 14) {
-                ConnectionStatusView(phase: client.phase)
+                HStack(spacing: 16) {
+                    ConnectionStatusView(phase: client.phase)
+                    Picker("화면", selection: $screen) {
+                        ForEach(Screen.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                    .fixedSize()
+                }
                 if landscape {
                     HStack(spacing: 18) {
-                        pages(columns: DeckConstants.columns)
+                        main(columns: DeckConstants.columns)
                         VolumeStrip(client: client, vertical: true)
                             .frame(width: 76)
                     }
                 } else {
-                    pages(columns: 3)
+                    main(columns: 3)
                     VolumeStrip(client: client, vertical: false)
                         .frame(height: 64)
                 }
@@ -56,6 +70,14 @@ struct DeckView: View {
             if page >= count { page = max(count - 1, 0) }
         }
         .preferredColorScheme(.dark)
+    }
+
+    @ViewBuilder
+    private func main(columns: Int) -> some View {
+        switch screen {
+        case .deck: pages(columns: columns)
+        case .keypad: KeypadView(client: client)
+        }
     }
 
     private func pages(columns: Int) -> some View {

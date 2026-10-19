@@ -70,6 +70,10 @@ final class LiveActions: DeckActions {
         MediaKey.press(key)
     }
 
+    func typeKey(_ key: TypedKey) async -> Bool {
+        KeyTyper.type(key)
+    }
+
     private var pendingVolume: Int?
     private var settingVolume = false
 

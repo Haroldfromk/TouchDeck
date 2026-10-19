@@ -64,9 +64,9 @@ public struct SessionKeys: Sendable {
     }
 }
 
-/// 허락받은 뒤의 모든 메시지를 감싸는 봉투. 메시지 하나하나에 번호와 서명을 붙인다.
-/// 토큰을 모르면 서명을 못 만드니, 중간에서 넘겨주기만 하는 가짜 맥은 메시지를 새로 만들거나 바꿀 수 없다.
-/// 번호가 늘어나야만 받으니 같은 메시지를 다시 보내도 걸린다.
+/// 허락받은 뒤의 모든 메시지를 감싸는 봉투. 메시지 하나하나를 이번 접속 전용 키로 암호화한다(ChaChaPoly).
+/// 내용이 보이지 않고(키패드로 친 비밀번호 숫자 포함), 토큰을 모르면 봉투를 새로 만들거나 바꿀 수 없다.
+/// 번호도 암호화에 묶어서, 번호가 늘어나야만 받으니 같은 메시지를 다시 보내도 걸린다.
 public struct SecureChannel: Sendable {
     public enum Role: Sendable { case client, mac }
     public enum OpenError: Error, Equatable { case notSecure, badSignature, replayed }
@@ -74,8 +74,8 @@ public struct SecureChannel: Sendable {
     private struct Envelope: Codable {
         var type = "secure"
         var seq: UInt64
-        var body: String
-        var mac: String
+        /// ChaChaPoly 결과(nonce 12바이트 + 암호문 + 확인용 태그 16바이트)를 base64로
+        var box: String
     }
 
     private let sendKey: SymmetricKey
@@ -92,7 +92,8 @@ public struct SecureChannel: Sendable {
 
     public mutating func seal(_ body: String) -> String {
         sentSeq += 1
-        let envelope = Envelope(seq: sentSeq, body: body, mac: hmacHex(key: sendKey, "\(sentSeq)|\(body)"))
+        let sealed = try? ChaChaPoly.seal(Data(body.utf8), using: sendKey, authenticating: Data("\(sentSeq)".utf8))
+        let envelope = Envelope(seq: sentSeq, box: sealed?.combined.base64EncodedString() ?? "")
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
         return String(decoding: (try? encoder.encode(envelope)) ?? Data(), as: UTF8.self)
@@ -102,9 +103,14 @@ public struct SecureChannel: Sendable {
         guard let envelope = try? JSONDecoder().decode(Envelope.self, from: Data(text.utf8)), envelope.type == "secure" else {
             throw OpenError.notSecure
         }
-        guard hmacHex(key: receiveKey, "\(envelope.seq)|\(envelope.body)") == envelope.mac else { throw OpenError.badSignature }
+        guard let combined = Data(base64Encoded: envelope.box),
+              let box = try? ChaChaPoly.SealedBox(combined: combined),
+              let plain = try? ChaChaPoly.open(box, using: receiveKey, authenticating: Data("\(envelope.seq)".utf8)),
+              let body = String(data: plain, encoding: .utf8) else {
+            throw OpenError.badSignature
+        }
         guard envelope.seq > receivedSeq else { throw OpenError.replayed }
         receivedSeq = envelope.seq
-        return envelope.body
+        return body
     }
 }
