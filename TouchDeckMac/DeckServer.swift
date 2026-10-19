@@ -342,6 +342,9 @@ final class DeckServer {
         case .screenOptions(let fps, let audio):
             screen.options(session, fps: fps, audio: audio)
 
+        case .typeText, .pressKey:
+            break
+
         case .hello, .pair, .auth:
             break
         }

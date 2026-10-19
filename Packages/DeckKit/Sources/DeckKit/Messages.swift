@@ -76,6 +76,10 @@ public enum ClientMessage: Equatable, Sendable {
     /// 영상이 깨졌거나 처음 붙었다. 다음 프레임을 키프레임으로 달라
     case requestKeyframe
     case pointer(PointerEvent)
+    /// 보기 화면 입력칸에 쓴 글. 맥에서 앞에 떠 있는 창에 그대로 들어간다
+    case typeText(text: String)
+    /// 보기 화면 특수 키 줄의 키 하나
+    case pressKey(RemoteKey)
 }
 
 /// 맥 → 기기
@@ -110,7 +114,7 @@ public enum ServerMessage: Equatable, Sendable {
 private enum Key: String, CodingKey {
     case type, deviceId, deviceName, publicKey, proof, page, index, button, value
     case remaining, nonce, pages, items, ok, message, muted, available, keysAllowed, key, path, children
-    case displayId, maxSide, width, height, state, fps, audio
+    case displayId, maxSide, width, height, state, fps, audio, text
 }
 
 extension ClientMessage: Codable {
@@ -149,6 +153,8 @@ extension ClientMessage: Codable {
         case "requestKeyframe": self = .requestKeyframe
         // 터치 값(kind, x, y, dx, dy)은 type과 같은 단계에 펼쳐 둔다
         case "pointer": self = .pointer(try PointerEvent(from: decoder))
+        case "typeText": self = .typeText(text: try c.decode(String.self, forKey: .text))
+        case "pressKey": self = .pressKey(try c.decode(RemoteKey.self, forKey: .key))
         case let other:
             throw DecodingError.dataCorruptedError(forKey: .type, in: c, debugDescription: "unknown type \(other)")
         }
@@ -215,6 +221,12 @@ extension ClientMessage: Codable {
         case .pointer(let event):
             try c.encode("pointer", forKey: .type)
             try event.encode(to: encoder)
+        case .typeText(let text):
+            try c.encode("typeText", forKey: .type)
+            try c.encode(text, forKey: .text)
+        case .pressKey(let key):
+            try c.encode("pressKey", forKey: .type)
+            try c.encode(key, forKey: .key)
         }
     }
 }
