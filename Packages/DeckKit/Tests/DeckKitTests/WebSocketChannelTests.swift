@@ -99,3 +99,10 @@ func clientNoticesWhenServerGoesAway() async throws {
     #expect(tcp.keepaliveInterval == 2)
     #expect(tcp.keepaliveCount == 3)
 }
+
+/// 같은 와이파이가 아니어도 근처에 있으면 붙게: 에어드롭처럼 기기끼리 직접 연결(peer-to-peer)을 허용한다.
+/// 서버(NWListener), 찾기(NWBrowser), 연결(NWConnection) 셋 다 켜져 있어야 한다.
+@Test func parametersAllowPeerToPeer() {
+    #expect(DeckNetwork.parameters().includePeerToPeer)
+    #expect(DeckNetwork.browseParameters().includePeerToPeer)
+}

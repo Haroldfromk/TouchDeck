@@ -68,7 +68,7 @@ final class DeckClient {
 
     func start() {
         guard browser == nil else { return }
-        let browser = NWBrowser(for: .bonjour(type: DeckConstants.serviceType, domain: nil), using: .tcp)
+        let browser = NWBrowser(for: .bonjour(type: DeckConstants.serviceType, domain: nil), using: DeckNetwork.browseParameters())
         browser.stateUpdateHandler = { [weak self] state in
             MainActor.assumeIsolated { self?.browserChanged(state) }
         }

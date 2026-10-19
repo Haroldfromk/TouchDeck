@@ -17,6 +17,15 @@ public enum DeckNetwork {
         tcp.keepaliveCount = 3
         let params = NWParameters(tls: nil, tcp: tcp)
         params.defaultProtocolStack.applicationProtocols.insert(ws, at: 0)
+        // 같은 와이파이가 아니어도 근처에 있으면 붙게 (에어드롭처럼 기기끼리 직접 연결)
+        params.includePeerToPeer = true
+        return params
+    }
+
+    /// 아이패드가 Bonjour로 맥을 찾을 때. 직접 연결로 광고하는 맥도 찾게 한다.
+    public static func browseParameters() -> NWParameters {
+        let params = NWParameters.tcp
+        params.includePeerToPeer = true
         return params
     }
 }
