@@ -1,6 +1,23 @@
-.build/
+# macOS
+.DS_Store
+
+# Xcode 프로젝트는 project.yml에서 xcodegen으로 만든다
 *.xcodeproj/
+*.xcworkspace/
 xcuserdata/
-.superpowers/
+
+# 빌드 결과
 DerivedData/
+build/
+.build/
+*.xcresult
+*.dSYM
+*.dSYM.zip
+*.ipa
+*.xcarchive
+
+# Swift Package Manager
 .swiftpm/
+
+# 작업용 기록 (계획 원장, 테스트 로그, 임시 설정)
+.superpowers/
