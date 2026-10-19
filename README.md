@@ -43,7 +43,7 @@ TouchDeckMac/         맥 메뉴바 앱. NWListener 서버, 앱 실행, Alacritt
 Packages/DeckKit/     공용 Swift 패키지. 메시지, 버튼 배치, 페어링, 암호화, 검색 규칙
 TouchDeckUITests/     시뮬레이터 UI 테스트
 TouchDeckMacTests/    맥 앱 테스트
-docs/                 설계 문서, 구현 계획, 화면 캡처, 아이콘 원본(SVG)
+docs/                 화면 캡처, 구조 그림, 아이콘 원본(SVG)
 ```
 
 - 버튼 설정의 원본은 맥(`~/Library/Application Support/TouchDeck/config.json`)에만 있다. 아이패드와 아이폰은 받아서 보여주고, 고칠 때는 맥에 요청한다. 그래서 여러 기기가 늘 같은 배치를 본다.
@@ -146,5 +146,3 @@ TOUCHDECK_DEBUG_PAIR_CODE=4821 TOUCHDECK_DEBUG_CONFIG=/tmp/touchdeck-e2e.json ./
 4. [키캡처럼 눌리는 버튼, 길게 눌러 편집하기, 옆으로 넘기는 페이지](https://haroldfromk.github.io/posts/StreamDeck-(4)/)
 5. [아무나 내 맥을 못 건드리게 하는 4자리 숫자, 키 교환, 메시지마다 붙이는 서명](https://haroldfromk.github.io/posts/StreamDeck-(5)/)
 6. [무각 키보드 대신 쓰는 아이패드 숫자 키패드, 그리고 메시지 암호화](https://haroldfromk.github.io/posts/StreamDeck-(6)/)
-
-설계 문서는 [docs/superpowers/specs](docs/superpowers/specs/2026-10-19-touchdeck-design.md)에 있다.

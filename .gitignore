@@ -21,3 +21,6 @@ build/
 
 # 작업용 기록 (계획 원장, 테스트 로그, 임시 설정)
 .superpowers/
+
+# 만드는 동안 쓴 설계 문서와 구현 계획 (이 맥에만 둔다)
+docs/superpowers/
