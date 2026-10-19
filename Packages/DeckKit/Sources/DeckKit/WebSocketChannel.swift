@@ -35,6 +35,8 @@ public enum DeckNetwork {
 public final class WebSocketChannel: @unchecked Sendable {
     public let connection: NWConnection
     public var onText: (@Sendable (String) -> Void)?
+    /// 바이너리 메시지(맥 화면 영상). 맥은 기기에게서 바이너리를 받을 일이 없다.
+    public var onBinary: (@Sendable (Data) -> Void)?
     public var onState: (@Sendable (NWConnection.State) -> Void)?
 
     public init(connection: NWConnection) {
@@ -59,6 +61,17 @@ public final class WebSocketChannel: @unchecked Sendable {
                         })
     }
 
+    /// onSent: 네트워크로 다 넘어간 뒤(또는 실패 뒤) 불린다. 밀린 프레임 수를 세는 데 쓴다.
+    public func sendBinary(_ data: Data, onSent: (@Sendable () -> Void)? = nil) {
+        let meta = NWProtocolWebSocket.Metadata(opcode: .binary)
+        let context = NWConnection.ContentContext(identifier: "binary", metadata: [meta])
+        connection.send(content: data, contentContext: context, isComplete: true,
+                        completion: .contentProcessed { [weak self] error in
+                            onSent?()
+                            if error != nil { self?.connection.cancel() }
+                        })
+    }
+
     public func cancel() {
         connection.cancel()
     }
@@ -69,6 +82,8 @@ public final class WebSocketChannel: @unchecked Sendable {
             let meta = context?.protocolMetadata(definition: NWProtocolWebSocket.definition) as? NWProtocolWebSocket.Metadata
             if let content, meta?.opcode == .text, let text = String(data: content, encoding: .utf8) {
                 self.onText?(text)
+            } else if let content, meta?.opcode == .binary {
+                self.onBinary?(content)
             }
             // 상대가 사라지면 받기는 오류로 끝나지만 연결 상태는 ready로 남는다.
             // 직접 닫아서 .cancelled를 알려야 다시 찾으러 갈 수 있다.

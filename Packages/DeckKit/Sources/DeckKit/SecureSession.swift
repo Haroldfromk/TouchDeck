@@ -82,6 +82,9 @@ public struct SecureChannel: Sendable {
     private let receiveKey: SymmetricKey
     private var sentSeq: UInt64 = 0
     private var receivedSeq: UInt64 = 0
+    // 영상(바이너리)은 번호를 따로 센다. 확인 값에 "bin|"을 붙여 글자 봉투와 섞어 쓸 수 없게 한다.
+    private var sentBinarySeq: UInt64 = 0
+    private var receivedBinarySeq: UInt64 = 0
 
     public init(keys: SessionKeys, role: Role) {
         switch role {
@@ -112,5 +115,29 @@ public struct SecureChannel: Sendable {
         guard envelope.seq > receivedSeq else { throw OpenError.replayed }
         receivedSeq = envelope.seq
         return body
+    }
+
+    /// 영상 프레임용. 겉모양: 번호 8바이트(big endian) + ChaChaPoly 결과(nonce 12 + 암호문 + 태그 16).
+    /// JSON과 base64를 거치지 않아서 큰 프레임도 그대로 보낸다.
+    public mutating func sealBinary(_ body: Data) -> Data {
+        sentBinarySeq += 1
+        let sealed = try? ChaChaPoly.seal(body, using: sendKey, authenticating: Self.binaryLabel(sentBinarySeq))
+        return withUnsafeBytes(of: sentBinarySeq.bigEndian) { Data($0) } + (sealed?.combined ?? Data())
+    }
+
+    public mutating func openBinary(_ data: Data) throws -> Data {
+        guard data.count >= 8 + 12 + 16 else { throw OpenError.notSecure }
+        let seq = data.prefix(8).reduce(UInt64(0)) { $0 << 8 | UInt64($1) }
+        guard let box = try? ChaChaPoly.SealedBox(combined: data.dropFirst(8)),
+              let plain = try? ChaChaPoly.open(box, using: receiveKey, authenticating: Self.binaryLabel(seq)) else {
+            throw OpenError.badSignature
+        }
+        guard seq > receivedBinarySeq else { throw OpenError.replayed }
+        receivedBinarySeq = seq
+        return plain
+    }
+
+    private static func binaryLabel(_ seq: UInt64) -> Data {
+        Data("bin|\(seq)".utf8)
     }
 }
