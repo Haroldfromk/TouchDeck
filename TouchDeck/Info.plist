@@ -28,8 +28,6 @@
 	<string>같은 와이파이에 있는 맥의 TouchDeck을 찾아 버튼 누름을 보내기 위해 로컬 네트워크를 사용합니다.</string>
 	<key>UILaunchScreen</key>
 	<dict/>
-	<key>UIRequiresFullScreen</key>
-	<false/>
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>

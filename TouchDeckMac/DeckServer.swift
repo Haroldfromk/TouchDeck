@@ -133,18 +133,17 @@ final class DeckServer {
                 session.stage = .awaitingAuth(nonce: nonce)
                 session.send(.challenge(nonce: nonce))
             } else {
-                pairingCode = authority.beginPairing(deviceId: deviceId, deviceName: deviceName)
-                pairingDeviceName = deviceName
-                session.stage = .awaitingPairing
-                session.send(.needPairing)
+                beginPairing(session, deviceId: deviceId, deviceName: deviceName)
             }
 
         case (.awaitingAuth(let nonce), .auth(let signature)):
-            if let deviceId = session.deviceId, authority.verify(deviceId: deviceId, nonce: nonce, signature: signature) {
+            guard let deviceId = session.deviceId else { return }
+            if authority.verify(deviceId: deviceId, nonce: nonce, signature: signature) {
                 authorize(session)
             } else {
-                session.stage = .awaitingHello
-                session.send(.unauthorized)
+                // 서명이 틀리면(기기가 토큰을 잃었거나 가짜) 다시 숫자로 허락받게 한다.
+                // 기존 허락은 지우지 않는다. 남이 내 기기 ID로 틀린 서명을 보내 허락을 끊는 걸 막기 위해.
+                beginPairing(session, deviceId: deviceId, deviceName: session.deviceName ?? "새 기기")
             }
 
         case (.awaitingPairing, .pair(let code)):
@@ -169,6 +168,13 @@ final class DeckServer {
         default:
             session.send(.unauthorized)
         }
+    }
+
+    private func beginPairing(_ session: ClientSession, deviceId: String, deviceName: String) {
+        pairingCode = authority.beginPairing(deviceId: deviceId, deviceName: deviceName)
+        pairingDeviceName = deviceName
+        session.stage = .awaitingPairing
+        session.send(.needPairing)
     }
 
     private func authorize(_ session: ClientSession) {

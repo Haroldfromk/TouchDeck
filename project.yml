@@ -27,7 +27,6 @@ targets:
         UILaunchScreen: {}
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
         UISupportedInterfaceOrientations~ipad: [UIInterfaceOrientationPortrait, UIInterfaceOrientationPortraitUpsideDown, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
-        UIRequiresFullScreen: false
         NSLocalNetworkUsageDescription: 같은 와이파이에 있는 맥의 TouchDeck을 찾아 버튼 누름을 보내기 위해 로컬 네트워크를 사용합니다.
         NSBonjourServices: [_touchdeck._tcp]
     settings:
