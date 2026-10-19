@@ -111,3 +111,27 @@ import Testing
     #expect(ScreenGeometry.fit(width: 3440, height: 1440, maxSide: 0).width == 320)
     #expect(ScreenGeometry.fit(width: 7680, height: 4320, maxSide: 100_000).width == 3840)
 }
+
+// MARK: - 두 손가락: 확대, 보는 위치 옮기기, 맥 스크롤
+
+@Test func pinchBecomesZoom() {
+    #expect(TwoFinger.decide(.undecided, scale: 1.1, moved: 0, zoom: 1) == .zoom)
+}
+
+@Test func swipeAtNormalSizeScrollsMac() {
+    #expect(TwoFinger.decide(.undecided, scale: 1, moved: 13, zoom: 1) == .scroll)
+}
+
+@Test func swipeWhileZoomedMovesView() {
+    #expect(TwoFinger.decide(.undecided, scale: 1, moved: 13, zoom: 2) == .pan)
+}
+
+@Test func smallMovesStayUndecided() {
+    #expect(TwoFinger.decide(.undecided, scale: 1.05, moved: 10, zoom: 2) == .undecided)
+}
+
+@Test func decidedModeSticks() {
+    // 스크롤로 정한 뒤 손가락 간격이 조금 변해도 확대로 바뀌지 않는다
+    #expect(TwoFinger.decide(.scroll, scale: 1.3, moved: 40, zoom: 1) == .scroll)
+    #expect(TwoFinger.decide(.pan, scale: 1.3, moved: 40, zoom: 2) == .pan)
+}

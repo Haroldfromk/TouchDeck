@@ -2,7 +2,8 @@ import DeckKit
 import SwiftUI
 import UIKit
 
-/// 맥 화면 전체 보기. 탭=클릭, 두 손가락 탭=우클릭, 한 손가락이나 두 손가락 쓸기=스크롤,
+/// 맥 화면 전체 보기. 탭=클릭, 두 손가락 탭=우클릭, 한 손가락 쓸기=스크롤,
+/// 두 손가락 쓸기=원래 크기면 스크롤, 확대 중이면 보는 위치 옮기기,
 /// 길게 눌렀다 끌기=드래그(블록 선택, 창 옮기기), 핀치=이 화면만 확대.
 struct ScreenViewer: View {
     let client: DeckClient
@@ -190,7 +191,6 @@ private struct VideoSurface: UIViewRepresentable {
         private weak var view: SurfaceView?
 
         /// 두 손가락 제스처를 시작할 때 정한다: 벌리면 확대(맥에 안 보냄), 그냥 쓸면 스크롤
-        private enum TwoFinger { case undecided, zoom, scroll }
         private var twoFinger = TwoFinger.undecided
         private var pinchStartZoom: CGFloat = 1
         private var pinchScale: CGFloat = 1
@@ -313,7 +313,7 @@ private struct VideoSurface: UIViewRepresentable {
                 pinchScale = 1
             case .changed:
                 pinchScale = g.scale
-                if twoFinger == .undecided, abs(g.scale - 1) > 0.08 { twoFinger = .zoom }
+                twoFinger = TwoFinger.decide(twoFinger, scale: g.scale, moved: 0, zoom: parent.zoom)
                 guard twoFinger == .zoom, let view else { return }
                 let zoom = min(max(pinchStartZoom * g.scale, 1), 4)
                 parent.zoom = zoom
@@ -333,10 +333,10 @@ private struct VideoSurface: UIViewRepresentable {
             case .changed:
                 let delta = CGPoint(x: t.x - lastPanTranslation.x, y: t.y - lastPanTranslation.y)
                 lastPanTranslation = t
-                if twoFinger == .undecided, hypot(t.x, t.y) > 12, abs(pinchScale - 1) <= 0.08 { twoFinger = .scroll }
+                twoFinger = TwoFinger.decide(twoFinger, scale: pinchScale, moved: hypot(t.x, t.y), zoom: parent.zoom)
                 switch twoFinger {
-                case .zoom:
-                    // 확대하면서 손가락을 옮기면 확대한 영상이 따라 움직인다
+                case .zoom, .pan:
+                    // 확대하면서 손가락을 옮기거나, 확대된 화면을 두 손가락으로 쓸면 보는 위치가 따라 움직인다
                     guard let view else { return }
                     parent.offset = ScreenGeometry.clampOffset(
                         CGSize(width: parent.offset.width + delta.x, height: parent.offset.height + delta.y),

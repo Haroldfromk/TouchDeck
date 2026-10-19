@@ -51,3 +51,21 @@ public enum ScreenGeometry {
         return (even(Double(width) * scale), even(Double(height) * scale))
     }
 }
+
+/// 두 손가락이 닿았을 때 무엇을 할지. 한 번 정하면 손을 뗄 때까지 바꾸지 않는다.
+/// 손가락 간격이 8% 넘게 변하면 확대, 그 전에 12pt 넘게 움직이면 쓸기다.
+/// 쓸기는 확대 중이면 보는 위치 옮기기, 원래 크기면 맥 스크롤(맥 스크롤은 확대 중에도 한 손가락으로 된다).
+public enum TwoFinger: Equatable, Sendable {
+    case undecided, zoom, pan, scroll
+
+    public static let zoomScale: CGFloat = 0.08
+    public static let moveDistance: CGFloat = 12
+
+    /// scale: 핀치 배율(1이 그대로), moved: 닿은 뒤 움직인 거리(pt), zoom: 지금 확대 배율
+    public static func decide(_ current: TwoFinger, scale: CGFloat, moved: CGFloat, zoom: CGFloat) -> TwoFinger {
+        guard current == .undecided else { return current }
+        if abs(scale - 1) > zoomScale { return .zoom }
+        if moved > moveDistance { return zoom > 1.01 ? .pan : .scroll }
+        return .undecided
+    }
+}
