@@ -42,6 +42,27 @@ final class DeckClient {
     /// 지금 맥과 붙어 있는 길 (같은 와이파이 / 직접 연결 등)
     private(set) var route: ConnectionRoute?
 
+    /// 맥 화면 보기: 지금 받고 있는 영상
+    struct ScreenStream: Equatable {
+        let displayId: UInt32
+        let width: Int
+        let height: Int
+    }
+
+    /// 맥이 화면 보기 요청에 답한 것 (허용 안 됨, 권한 없음 등). 같은 답이 다시 와도 새로 보이게 id를 둔다
+    struct ScreenNotice: Equatable {
+        let id = UUID()
+        let state: ScreenState
+        let message: String?
+    }
+
+    private(set) var displays: [DisplayInfo] = []
+    private(set) var displayThumbnails: [UInt32: UIImage] = [:]
+    private(set) var screenStream: ScreenStream?
+    private(set) var screenNotice: ScreenNotice?
+    @ObservationIgnored let video = VideoRenderer()
+    @ObservationIgnored private var lastKeyframeRequest = Date.distantPast
+
     struct FolderListing: Equatable {
         let path: String
         let children: [String]
@@ -121,6 +142,54 @@ final class DeckClient {
     /// 폴더 고르기: 맥에 이 폴더의 하위 폴더 목록을 묻는다. 답은 folderListing으로 온다
     func listFolder(_ path: String) { send(.listFolder(path: path)) }
 
+    // MARK: - 맥 화면
+
+    // 화면 요청은 허락받은 뒤 봉투 안에서만. 허락 전에 평문으로 나가면 맥이 인사부터 다시 하게 된다
+    func listDisplays() {
+        guard isConnected else { return }
+        screenNotice = nil
+        send(.listDisplays)
+    }
+
+    /// 아이패드는 긴 변 1920, 아이폰은 1280으로 받는다
+    func startScreen(_ displayId: UInt32) {
+        guard isConnected else { return }
+        screenNotice = nil
+        video.reset()
+        send(.startScreen(displayId: displayId, maxSide: UIDevice.current.userInterfaceIdiom == .pad ? 1920 : 1280))
+    }
+
+    func stopScreen() {
+        if isConnected { send(.stopScreen) }
+        screenStream = nil
+        video.reset()
+    }
+
+    func pointer(_ event: PointerEvent) {
+        guard screenStream != nil else { return }
+        send(.pointer(event))
+    }
+
+    /// 영상이 깨졌거나 처음이다. 맥이 키프레임을 하나 보내 주면 다시 또렷해진다 (0.5초에 한 번까지)
+    func requestKeyframe() {
+        guard screenStream != nil, Date.now.timeIntervalSince(lastKeyframeRequest) > 0.5 else { return }
+        lastKeyframeRequest = .now
+        send(.requestKeyframe)
+    }
+
+    /// 영상 프레임은 허락받은 접속에서, 이번 접속 키로 봉인된 것만 그린다
+    private func receiveBinary(_ data: Data) {
+        guard var secure, screenStream != nil else { return }
+        do {
+            let plain = try secure.openBinary(data)
+            self.secure = secure
+            guard let packet = VideoPacket.decode(plain) else { return }
+            if !video.enqueue(packet) { requestKeyframe() }
+        } catch {
+            print("[client] bad frame:", error)
+        }
+    }
+
     /// 허락받은 뒤에는 서명된 봉투에 넣어 보낸다.
     private func send(_ message: ClientMessage) {
         guard let text = try? message.encoded() else { return }
@@ -173,6 +242,9 @@ final class DeckClient {
         channel.onText = { [weak self] text in
             MainActor.assumeIsolated { self?.receive(text) }
         }
+        channel.onBinary = { [weak self] data in
+            MainActor.assumeIsolated { self?.receiveBinary(data) }
+        }
         channel.onState = { [weak self, weak channel] state in
             MainActor.assumeIsolated {
                 guard let self, let channel, channel === self.channel else { return }
@@ -209,6 +281,9 @@ final class DeckClient {
         route = nil
         secure = nil
         pendingPairing = nil
+        screenStream = nil
+        displays = []
+        video.reset()
         if phase != .localNetworkDenied { phase = .searching }
         browser?.cancel()
         browser = nil
@@ -286,6 +361,22 @@ final class DeckClient {
             folderListing = FolderListing(path: path, children: children, ok: ok)
         case .pressResult(let page, let index, let ok, let message):
             lastResult = PressFeedback(page: page, index: index, ok: ok, message: message)
+        case .displays(let items):
+            displays = items
+            displayThumbnails = Dictionary(uniqueKeysWithValues: items.compactMap { item in
+                Data(base64Encoded: item.thumbnail).flatMap(UIImage.init(data:)).map { (item.id, $0) }
+            })
+        case .screenStarted(let displayId, let width, let height):
+            screenStream = ScreenStream(displayId: displayId, width: width, height: height)
+            lastKeyframeRequest = .distantPast
+            requestKeyframe()
+        case .screenStatus(let state, let message):
+            screenNotice = ScreenNotice(state: state, message: message)
+            // 조작만 안 되는 거면 화면은 계속 본다
+            if state != .ok && state != .noInput {
+                screenStream = nil
+                video.reset()
+            }
         case .volume(let value, let muted, let available, let keysAllowed):
             if Date.now.timeIntervalSince(lastLocalVolumeChange) > 2 { volume = value }
             self.muted = muted

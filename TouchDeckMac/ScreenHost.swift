@@ -28,7 +28,11 @@ final class ScreenHost {
 
     func listDisplays(for session: ClientSession, allowed: Bool) {
         guard check(session, allowed: allowed) else { return }
-        Task { session.send(.displays(await DisplayCatalog.list())) }
+        Task {
+            let items = await DisplayCatalog.list()
+            // 모니터가 하나도 안 잡히면 권한 문제다 (권한을 켠 뒤 앱을 다시 실행하지 않았을 때 이렇게 된다)
+            session.send(items.isEmpty ? .screenStatus(.noPermission, message: nil) : .displays(items))
+        }
     }
 
     func start(_ session: ClientSession, displayId: UInt32, maxSide: Int, allowed: Bool) {

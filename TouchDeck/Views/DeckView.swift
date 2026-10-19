@@ -17,12 +17,13 @@ struct DeckView: View {
     @State private var failure: DeckClient.PressFeedback?
     /// 맥이 "실행했음"을 돌려준 버튼. 잠깐 테두리가 빛난다
     @State private var success: DeckClient.PressFeedback?
-    /// 스트림덱 / 숫자 키패드. 마지막에 고른 화면을 기억한다
+    /// 스트림덱 / 숫자 키패드 / 맥 화면. 마지막에 고른 화면을 기억한다
     @AppStorage("screen") private var screen = Screen.deck
 
     enum Screen: String, CaseIterable {
         case deck = "스트림덱"
         case keypad = "숫자 키패드"
+        case screen = "맥 화면"
     }
 
     var body: some View {
@@ -37,7 +38,10 @@ struct DeckView: View {
                     .pickerStyle(.segmented)
                     .fixedSize()
                 }
-                if landscape {
+                // 맥 화면 탭은 모니터 카드를 넓게 쓰려고 볼륨 칸을 숨긴다
+                if screen == .screen {
+                    main(columns: DeckConstants.columns)
+                } else if landscape {
                     HStack(spacing: 18) {
                         main(columns: DeckConstants.columns)
                         VolumeStrip(client: client, vertical: true)
@@ -87,6 +91,7 @@ struct DeckView: View {
         switch screen {
         case .deck: pages(columns: columns)
         case .keypad: KeypadView(client: client)
+        case .screen: ScreenPickerView(client: client, onClose: { screen = .deck })
         }
     }
 
