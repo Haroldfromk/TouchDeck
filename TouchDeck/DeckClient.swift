@@ -62,6 +62,8 @@ final class DeckClient {
     private(set) var screenNotice: ScreenNotice?
     @ObservationIgnored let video = VideoRenderer()
     @ObservationIgnored let audioPlayer = AudioPlayer()
+    /// 맥 앱의 기능 번호(허락받을 때 알려 준다). 그 전이나 끊긴 뒤엔 nil
+    private(set) var macProtocol: Int?
     /// 화면 보기 30/60과 소리. 마지막에 고른 값을 기억한다
     private(set) var screenFPS = UserDefaults.standard.object(forKey: "screen.fps") as? Int ?? ScreenFPS.high
     private(set) var screenAudio = UserDefaults.standard.object(forKey: "screen.audio") as? Bool ?? true
@@ -232,7 +234,8 @@ final class DeckClient {
         secure = nil
         pendingPairing = nil
         clientNonce = SessionKeys.makeNonce()
-        send(.hello(deviceId: KeychainStore.deviceId(), deviceName: UIDevice.current.name, nonce: clientNonce))
+        send(.hello(deviceId: KeychainStore.deviceId(), deviceName: UIDevice.current.name, nonce: clientNonce,
+                    protocolVersion: DeckProtocol.current))
     }
 
     /// 상대가 증명을 못 했다. 토큰을 모르는 가짜 맥일 수 있으니 끊고 다시 찾는다.
@@ -312,6 +315,7 @@ final class DeckClient {
         displays = []
         video.reset()
         audioPlayer.stop()
+        macProtocol = nil
         if phase != .localNetworkDenied { phase = .searching }
         browser?.cancel()
         browser = nil
@@ -373,7 +377,8 @@ final class DeckClient {
             guard keys.macProof == proof else { return rejectMac("challenge proof") }
             send(.auth(proof: keys.clientProof))
             secure = SecureChannel(keys: keys, role: .client)
-        case .authorized:
+        case .authorized(let protocolVersion):
+            macProtocol = protocolVersion
             phase = .connected(macName)
         case .unauthorized:
             // 허락 전에 보낸 요청이거나, 맥 메뉴에서 허락을 취소했다. 처음부터 다시 인사한다.

@@ -43,3 +43,23 @@ import Testing
 @Test func emptyTextHasNoChunks() {
     #expect(TextInput.chunks("") == [])
 }
+
+// MARK: - 기능 번호
+
+@Test func helloCarriesProtocol() throws {
+    let m = ClientMessage.hello(deviceId: "d", deviceName: "iPad", nonce: "n", protocolVersion: 2)
+    #expect(try ClientMessage.decode(m.encoded()) == m)
+}
+
+@Test func helloWithoutProtocolIsOne() throws {
+    let old = #"{"type":"hello","deviceId":"d","deviceName":"iPad","nonce":"n"}"#
+    #expect(try ClientMessage.decode(old) == .hello(deviceId: "d", deviceName: "iPad", nonce: "n", protocolVersion: 1))
+}
+
+@Test func authorizedCarriesProtocol() throws {
+    #expect(try ServerMessage.decode(ServerMessage.authorized(protocolVersion: 2).encoded()) == .authorized(protocolVersion: 2))
+}
+
+@Test func authorizedWithoutProtocolIsOne() throws {
+    #expect(try ServerMessage.decode(#"{"type":"authorized"}"#) == .authorized(protocolVersion: 1))
+}

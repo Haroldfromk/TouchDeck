@@ -30,7 +30,7 @@ import Testing
     let all: [ServerMessage] = [
         .needPairing(publicKey: "cHVi", nonce: "m1"), .pairingFailed(remaining: 3), .pairingLocked, .paired(proof: "ab"),
         .challenge(nonce: "n", proof: "cd"),
-        .authorized, .unauthorized, .apps([AppInfo(name: "Xcode", bundleId: "com.apple.dt.Xcode", icon: "AAA")]),
+        .authorized(protocolVersion: 2), .unauthorized, .apps([AppInfo(name: "Xcode", bundleId: "com.apple.dt.Xcode", icon: "AAA")]),
         .pressResult(page: 0, index: 1, ok: false, message: "폴더 없음: /x"),
         .pressResult(page: 0, index: 1, ok: true, message: nil),
         .volume(value: 30, muted: true, available: true, keysAllowed: true),
@@ -43,7 +43,7 @@ import Testing
 
 @Test func everyClientMessageRoundTrips() throws {
     let all: [ClientMessage] = [
-        .hello(deviceId: "d", deviceName: "Harold의 iPad", nonce: "c1"), .pair(publicKey: "cHVi", proof: "ab"), .auth(proof: "ab"),
+        .hello(deviceId: "d", deviceName: "Harold의 iPad", nonce: "c1", protocolVersion: 2), .pair(publicKey: "cHVi", proof: "ab"), .auth(proof: "ab"),
         .getApps, .clearButton(page: 0, index: 0), .volumeKey(.up), .volumeKey(.down), .volumeKey(.mute),
         .listFolder(path: "~"), .listFolder(path: "~/Documents"),
         .typeKey(.digit(0)), .typeKey(.digit(7)), .typeKey(.tab), .typeKey(.delete), .typeKey(.enter),

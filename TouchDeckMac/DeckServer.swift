@@ -186,11 +186,12 @@ final class DeckServer {
         print("[server] <-", session.deviceName ?? "?", text.prefix(200))
 
         switch (session.stage, message) {
-        case (_, .hello(let deviceId, let deviceName, let clientNonce)):
+        case (_, .hello(let deviceId, let deviceName, let clientNonce, let protocolVersion)):
             // 이름은 상대가 정한다. 메뉴에 보이는 페어링 대기/연결/허락 목록 모두 이 이름을 쓰니 여기서 자른다
             let deviceName = PreAuthLimits.displayName(deviceName)
             session.deviceId = deviceId
             session.deviceName = deviceName
+            session.protocolVersion = protocolVersion
             session.clientNonce = clientNonce
             let macNonce = SessionKeys.makeNonce()
             session.macNonce = macNonce
@@ -262,7 +263,7 @@ final class DeckServer {
         session.secure = SecureChannel(keys: keys, role: .mac)
         session.pendingKeys = nil
         session.stage = .authorized
-        session.send(.authorized)
+        session.send(.authorized(protocolVersion: DeckProtocol.current))
         session.send(.layout(config.layout))
         refreshDevices()
         Task {

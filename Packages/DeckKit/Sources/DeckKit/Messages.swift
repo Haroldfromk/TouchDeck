@@ -52,7 +52,8 @@ public enum TypedKey: Equatable, Hashable, Sendable, Codable {
 
 /// 허락받기 전에는 hello, pair, auth만 그대로 보낸다. 나머지는 SecureChannel 봉투에 넣어 보낸다.
 public enum ClientMessage: Equatable, Sendable {
-    case hello(deviceId: String, deviceName: String, nonce: String)
+    /// protocolVersion: 이 기기 앱의 기능 번호(DeckProtocol). 예전 앱은 안 보낸다(1)
+    case hello(deviceId: String, deviceName: String, nonce: String, protocolVersion: Int)
     /// 숫자는 보내지 않는다. 기기의 임시 공개 키(base64)와 "같은 숫자를 안다"는 증명만 보낸다.
     case pair(publicKey: String, proof: String)
     case auth(proof: String)
@@ -94,7 +95,8 @@ public enum ServerMessage: Equatable, Sendable {
     case paired(proof: String)
     /// 맥 쪽 nonce와 "맥이 토큰을 안다"는 증명
     case challenge(nonce: String, proof: String)
-    case authorized
+    /// protocolVersion: 맥 앱의 기능 번호. 예전 맥 앱은 안 보낸다(1)
+    case authorized(protocolVersion: Int)
     case unauthorized
     case layout(DeckLayout)
     case apps([AppInfo])
@@ -115,6 +117,7 @@ private enum Key: String, CodingKey {
     case type, deviceId, deviceName, publicKey, proof, page, index, button, value
     case remaining, nonce, pages, items, ok, message, muted, available, keysAllowed, key, path, children
     case displayId, maxSide, width, height, state, fps, audio, text
+    case proto = "protocol"
 }
 
 extension ClientMessage: Codable {
@@ -124,7 +127,8 @@ extension ClientMessage: Codable {
         case "hello":
             self = .hello(deviceId: try c.decode(String.self, forKey: .deviceId),
                           deviceName: try c.decode(String.self, forKey: .deviceName),
-                          nonce: try c.decode(String.self, forKey: .nonce))
+                          nonce: try c.decode(String.self, forKey: .nonce),
+                          protocolVersion: try c.decodeIfPresent(Int.self, forKey: .proto) ?? DeckProtocol.legacy)
         case "pair":
             self = .pair(publicKey: try c.decode(String.self, forKey: .publicKey), proof: try c.decode(String.self, forKey: .proof))
         case "auth": self = .auth(proof: try c.decode(String.self, forKey: .proof))
@@ -163,11 +167,12 @@ extension ClientMessage: Codable {
     public func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: Key.self)
         switch self {
-        case .hello(let deviceId, let deviceName, let nonce):
+        case .hello(let deviceId, let deviceName, let nonce, let protocolVersion):
             try c.encode("hello", forKey: .type)
             try c.encode(deviceId, forKey: .deviceId)
             try c.encode(deviceName, forKey: .deviceName)
             try c.encode(nonce, forKey: .nonce)
+            try c.encode(protocolVersion, forKey: .proto)
         case .pair(let publicKey, let proof):
             try c.encode("pair", forKey: .type)
             try c.encode(publicKey, forKey: .publicKey)
@@ -242,7 +247,7 @@ extension ServerMessage: Codable {
         case "paired": self = .paired(proof: try c.decode(String.self, forKey: .proof))
         case "challenge":
             self = .challenge(nonce: try c.decode(String.self, forKey: .nonce), proof: try c.decode(String.self, forKey: .proof))
-        case "authorized": self = .authorized
+        case "authorized": self = .authorized(protocolVersion: try c.decodeIfPresent(Int.self, forKey: .proto) ?? DeckProtocol.legacy)
         case "unauthorized": self = .unauthorized
         case "layout": self = .layout(DeckLayout(pages: try c.decode([DeckPage].self, forKey: .pages)))
         case "apps": self = .apps(try c.decode([AppInfo].self, forKey: .items))
@@ -288,8 +293,9 @@ extension ServerMessage: Codable {
             try c.encode("challenge", forKey: .type)
             try c.encode(nonce, forKey: .nonce)
             try c.encode(proof, forKey: .proof)
-        case .authorized:
+        case .authorized(let protocolVersion):
             try c.encode("authorized", forKey: .type)
+            try c.encode(protocolVersion, forKey: .proto)
         case .unauthorized:
             try c.encode("unauthorized", forKey: .type)
         case .layout(let layout):

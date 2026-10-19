@@ -17,6 +17,8 @@ final class ClientSession: Identifiable {
     var stage: Stage = .awaitingHello
     var deviceId: String?
     var deviceName: String?
+    /// 기기 앱의 기능 번호. 번호를 안 보내는 예전 앱은 1
+    var protocolVersion = DeckProtocol.legacy
     var clientNonce: String?
     var macNonce: String?
     /// challenge를 보낸 뒤 기기의 증명을 기다리는 동안의 키
