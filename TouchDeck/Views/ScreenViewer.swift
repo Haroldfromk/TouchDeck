@@ -13,6 +13,8 @@ struct ScreenViewer: View {
     @State private var zoom: CGFloat = 1
     @State private var offset: CGSize = .zero
     @Environment(\.scenePhase) private var scenePhase
+    /// 아이폰 세로처럼 좁으면 툴바 버튼은 아이콘만 (글자까지 넣으면 화면 밖으로 넘친다)
+    @Environment(\.horizontalSizeClass) private var sizeClass
 
     private var stream: DeckClient.ScreenStream? {
         client.screenStream.flatMap { $0.displayId == display.id ? $0 : nil }
@@ -61,6 +63,18 @@ struct ScreenViewer: View {
                     }
                 }
             }
+            Picker("초당 프레임", selection: Binding(get: { client.screenFPS },
+                                                 set: { client.setScreenOptions(fps: $0, audio: client.screenAudio) })) {
+                Text("30").tag(ScreenFPS.low)
+                Text("60").tag(ScreenFPS.high)
+            }
+            .pickerStyle(.segmented)
+            .frame(width: 96)
+            .accessibilityLabel("초당 프레임")
+            toolButton(client.screenAudio ? "소리 끄기" : "소리 켜기",
+                       systemImage: client.screenAudio ? "speaker.wave.2.fill" : "speaker.slash.fill") {
+                client.setScreenOptions(fps: client.screenFPS, audio: !client.screenAudio)
+            }
             toolButton("닫기", systemImage: "xmark", action: onClose)
         }
         .padding(6)
@@ -71,6 +85,7 @@ struct ScreenViewer: View {
     private func toolButton(_ title: String, systemImage: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Label(title, systemImage: systemImage)
+                .labelStyle(ToolLabelStyle(iconOnly: sizeClass == .compact))
                 .font(.callout.weight(.medium))
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
@@ -349,6 +364,18 @@ private struct VideoSurface: UIViewRepresentable {
             let ratio = shown > 0 ? parent.macWidth / shown : 1
             send(.scroll, p, dx: pendingScroll.x * ratio, dy: pendingScroll.y * ratio)
             pendingScroll = .zero
+        }
+    }
+}
+
+private struct ToolLabelStyle: LabelStyle {
+    let iconOnly: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        if iconOnly {
+            Label(configuration).labelStyle(.iconOnly)
+        } else {
+            Label(configuration).labelStyle(.titleAndIcon)
         }
     }
 }

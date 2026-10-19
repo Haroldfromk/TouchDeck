@@ -61,6 +61,10 @@ final class DeckClient {
     private(set) var screenStream: ScreenStream?
     private(set) var screenNotice: ScreenNotice?
     @ObservationIgnored let video = VideoRenderer()
+    @ObservationIgnored let audioPlayer = AudioPlayer()
+    /// 화면 보기 30/60과 소리. 마지막에 고른 값을 기억한다
+    private(set) var screenFPS = UserDefaults.standard.object(forKey: "screen.fps") as? Int ?? ScreenFPS.high
+    private(set) var screenAudio = UserDefaults.standard.object(forKey: "screen.audio") as? Bool ?? true
     @ObservationIgnored private var lastKeyframeRequest = Date.distantPast
 
     struct FolderListing: Equatable {
@@ -156,7 +160,18 @@ final class DeckClient {
         guard isConnected else { return }
         screenNotice = nil
         video.reset()
-        send(.startScreen(displayId: displayId, maxSide: screenPixelLongSide, fps: 30, audio: false))
+        if screenAudio { audioPlayer.start() }
+        send(.startScreen(displayId: displayId, maxSide: screenPixelLongSide, fps: screenFPS, audio: screenAudio))
+    }
+
+    /// 보기 화면 툴바에서 30/60이나 소리를 바꿨다. 보고 있지 않으면 맥이 무시한다
+    func setScreenOptions(fps: Int, audio: Bool) {
+        screenFPS = ScreenFPS.normalize(fps)
+        screenAudio = audio
+        UserDefaults.standard.set(screenFPS, forKey: "screen.fps")
+        UserDefaults.standard.set(audio, forKey: "screen.audio")
+        if audio { audioPlayer.start() } else { audioPlayer.stop() }
+        if isConnected { send(.screenOptions(fps: screenFPS, audio: audio)) }
     }
 
     /// 11인치 아이패드는 2388, 12.9인치는 2732
@@ -170,6 +185,7 @@ final class DeckClient {
         if isConnected { send(.stopScreen) }
         screenStream = nil
         video.reset()
+        audioPlayer.stop()
     }
 
     func pointer(_ event: PointerEvent) {
@@ -190,8 +206,12 @@ final class DeckClient {
         do {
             let plain = try secure.openBinary(data)
             self.secure = secure
-            guard let packet = VideoPacket.decode(plain) else { return }
-            if !video.enqueue(packet) { requestKeyframe() }
+            // 첫 바이트로 나눈다: 1은 영상, 2는 소리
+            if let packet = VideoPacket.decode(plain) {
+                if !video.enqueue(packet) { requestKeyframe() }
+            } else if screenAudio, let packet = AudioPacket.decode(plain) {
+                audioPlayer.enqueue(packet)
+            }
         } catch {
             print("[client] bad frame:", error)
         }
@@ -291,6 +311,7 @@ final class DeckClient {
         screenStream = nil
         displays = []
         video.reset()
+        audioPlayer.stop()
         if phase != .localNetworkDenied { phase = .searching }
         browser?.cancel()
         browser = nil
@@ -383,6 +404,7 @@ final class DeckClient {
             if state != .ok && state != .noInput {
                 screenStream = nil
                 video.reset()
+                audioPlayer.stop()
             }
         case .volume(let value, let muted, let available, let keysAllowed):
             if Date.now.timeIntervalSince(lastLocalVolumeChange) > 2 { volume = value }
