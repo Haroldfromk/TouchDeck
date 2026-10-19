@@ -56,6 +56,28 @@ final class EndToEndUITests: XCTestCase {
         shot("15-signed-session")
     }
 
+    /// 고정 검색창: 영어 이름으로 한글 앱 찾기, 지우기 버튼
+    func testAppSearch() {
+        XCUIDevice.shared.orientation = .landscapeLeft
+        app.launch()
+        pairIfNeeded(shot: nil)
+        waitForConnected()
+        openEmptySlot()
+        let search = app.textFields["앱 검색"]
+        XCTAssertTrue(search.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label BEGINSWITH '맥에 설치된 앱'")).firstMatch.waitForExistence(timeout: 20))
+        shot("16-search-empty")
+        search.typeText("notes")   // 새 버튼이면 검색창에 바로 커서가 가 있다
+        XCTAssertTrue(app.buttons["메모"].waitForExistence(timeout: 5), "notes로 메모가 안 나옴")
+        XCTAssertTrue(app.staticTexts["검색 결과 1개"].exists)
+        shot("17-search-notes")
+        app.buttons["검색어 지우기"].tap()
+        search.typeText("saf")
+        XCTAssertTrue(app.buttons["Safari"].waitForExistence(timeout: 5))
+        shot("18-search-saf")
+        app.buttons["취소"].tap()
+    }
+
     /// 2페이지까지 버튼이 채워진 뒤(스크립트로 채움) 옆으로 넘겨 본다.
     func testSecondPage() {
         XCUIDevice.shared.orientation = .landscapeLeft

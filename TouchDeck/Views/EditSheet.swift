@@ -20,33 +20,27 @@ struct EditSheet: View {
     @State private var command = ""
     @State private var directory = ""
     @State private var search = ""
+    @FocusState private var searchFocused: Bool
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section {
-                    Picker("종류", selection: $kind) {
-                        ForEach(Kind.allCases) { Text($0.rawValue).tag($0) }
-                    }
-                    .pickerStyle(.segmented)
-                    .listRowBackground(Color.clear)
+            VStack(spacing: 12) {
+                Picker("종류", selection: $kind) {
+                    ForEach(Kind.allCases) { Text($0.rawValue).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .padding(.horizontal)
+
+                // 앱을 고를 때는 검색창을 목록 밖 맨 위에 고정한다. 목록을 내려도 사라지지 않게
+                if kind == .app {
+                    AppSearchField(text: $search, focused: $searchFocused, onSubmit: selectIfSingleResult)
+                        .padding(.horizontal)
                 }
 
-                switch kind {
-                case .app: appSection
-                case .command: commandSection
-                case .terminal: terminalSection
-                }
-
-                if target.button != nil {
-                    Section {
-                        Button("버튼 삭제", role: .destructive) {
-                            client.clearButton(page: target.page, index: target.index)
-                            dismiss()
-                        }
-                    }
-                }
+                form
             }
+            .padding(.top, 8)
+            .background(Color(uiColor: .systemGroupedBackground))
             .navigationTitle(target.button == nil ? "버튼 추가" : "버튼 편집")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -62,19 +56,46 @@ struct EditSheet: View {
                 }
             }
         }
-        .onAppear(perform: load)
+        .onAppear {
+            load()
+            // 새 앱 버튼을 추가할 때는 바로 검색부터 칠 수 있게
+            if target.button == nil && kind == .app { searchFocused = true }
+        }
         .preferredColorScheme(.dark)
+    }
+
+    private var form: some View {
+        Form {
+            switch kind {
+            case .app: appSection
+            case .command: commandSection
+            case .terminal: terminalSection
+            }
+
+            if target.button != nil {
+                Section {
+                    Button("버튼 삭제", role: .destructive) {
+                        client.clearButton(page: target.page, index: target.index)
+                        dismiss()
+                    }
+                }
+            }
+        }
+        .scrollDismissesKeyboard(.interactively)
     }
 
     // MARK: - 종류별 입력
 
+    @ViewBuilder
     private var appSection: some View {
-        Section("맥에 설치된 앱") {
-            TextField("이름 (비우면 앱 이름)", text: $label)
-            TextField("앱 검색", text: $search)
-                .textInputAutocapitalization(.never)
+        Section("버튼 이름") {
+            TextField("비우면 앱 이름 그대로", text: $label)
+        }
+        Section {
             if client.apps.isEmpty {
                 Text("맥에서 앱 목록을 받는 중이에요").foregroundStyle(.secondary)
+            } else if filteredApps.isEmpty {
+                Text("‘\(search)’와 맞는 앱이 없어요").foregroundStyle(.secondary)
             }
             ForEach(filteredApps, id: \.bundleId) { app in
                 Button {
@@ -84,15 +105,35 @@ struct EditSheet: View {
                         if let icon = client.icons[app.bundleId] {
                             Image(uiImage: icon).resizable().frame(width: 32, height: 32)
                         }
-                        Text(app.name).foregroundStyle(.primary)
+                        Text(highlighted(app.name)).foregroundStyle(.primary)
                         Spacer()
                         if bundleId == app.bundleId {
                             Image(systemName: "checkmark").foregroundStyle(DeckTheme.app)
                         }
                     }
                 }
+                .accessibilityLabel(app.name)
             }
+        } header: {
+            Text(search.isEmpty ? "맥에 설치된 앱 \(client.apps.count)개" : "검색 결과 \(filteredApps.count)개")
         }
+    }
+
+    /// 검색어와 글자 그대로 맞는 부분을 굵게
+    private func highlighted(_ name: String) -> AttributedString {
+        var text = AttributedString(name)
+        if let range = AppSearch.matchRange(in: name, query: search),
+           let lower = AttributedString.Index(range.lowerBound, within: text),
+           let upper = AttributedString.Index(range.upperBound, within: text) {
+            text[lower..<upper].font = .body.bold()
+            text[lower..<upper].foregroundColor = DeckTheme.app
+        }
+        return text
+    }
+
+    /// 검색 결과가 하나뿐이면 엔터만 쳐도 그 앱을 고른다
+    private func selectIfSingleResult() {
+        if filteredApps.count == 1 { bundleId = filteredApps[0].bundleId }
     }
 
     private var commandSection: some View {
@@ -127,9 +168,7 @@ struct EditSheet: View {
     }
 
     private var filteredApps: [AppInfo] {
-        let query = search.trimmingCharacters(in: .whitespaces)
-        guard !query.isEmpty else { return client.apps }
-        return client.apps.filter { $0.name.localizedCaseInsensitiveContains(query) }
+        AppSearch.filter(client.apps, query: search)
     }
 
     // MARK: - 불러오기/만들기
