@@ -40,6 +40,9 @@ private struct KeypadKey: View {
     let onPress: (TypedKey) -> Void
 
     @State private var pressed = false
+    /// 짧게 탭해도 눌림이 보이게 (아이패드는 진동이 없다)
+    @State private var tapFlash = false
+    private var down: Bool { pressed || tapFlash }
     private let haptic = UIImpactFeedbackGenerator(style: .light)
 
     var body: some View {
@@ -51,15 +54,21 @@ private struct KeypadKey: View {
                 RoundedRectangle(cornerRadius: side * 0.16)
                     .fill(LinearGradient(colors: [DeckTheme.keycapTop, DeckTheme.keycap], startPoint: .top, endPoint: .bottom))
                     .overlay(RoundedRectangle(cornerRadius: side * 0.16).strokeBorder(.white.opacity(0.06), lineWidth: 1))
+                    .overlay { RoundedRectangle(cornerRadius: side * 0.16).fill(.white.opacity(down ? 0.09 : 0)) }
                     .overlay { legend(side: side) }
-                    .offset(y: pressed ? lip : 0)
+                    .offset(y: down ? lip : 0)
             }
             .padding(.bottom, lip)
-            .animation(.spring(duration: 0.1), value: pressed)
+            .animation(.spring(duration: 0.1), value: down)
         }
         .contentShape(.rect)
         .onTapGesture {
             haptic.impactOccurred()
+            tapFlash = true
+            Task {
+                try? await Task.sleep(for: .milliseconds(120))
+                tapFlash = false
+            }
             onPress(key)
         }
         .onLongPressGesture(minimumDuration: 10) {} onPressingChanged: { pressed = $0 }

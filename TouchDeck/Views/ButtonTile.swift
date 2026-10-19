@@ -6,10 +6,15 @@ struct ButtonTile: View {
     let button: DeckButton?
     let icon: UIImage?
     let failed: Bool
+    /// 맥이 "실행했음"을 돌려준 직후 잠깐 true. 테두리가 버튼 종류 색으로 빛난다
+    var succeeded = false
     let onTap: () -> Void
     let onEdit: () -> Void
 
     @State private var pressed = false
+    /// 짧게 탭하면 "누르고 있는 동안" 신호가 오기 전에 손이 떨어진다. 그래도 눌림이 보이게 잠깐 켠다
+    @State private var tapFlash = false
+    private var down: Bool { pressed || tapFlash }
 
     var body: some View {
         GeometryReader { geo in
@@ -24,7 +29,10 @@ struct ButtonTile: View {
             .frame(width: geo.size.width, height: geo.size.height)
         }
         .contentShape(.rect)
-        .onTapGesture { button == nil ? onEdit() : onTap() }
+        .onTapGesture {
+            flashPress()
+            button == nil ? onEdit() : onTap()
+        }
         .onLongPressGesture(minimumDuration: 0.45) {
             UIImpactFeedbackGenerator(style: .medium).impactOccurred()
             onEdit()
@@ -34,6 +42,16 @@ struct ButtonTile: View {
         .accessibilityHint(button == nil ? "버튼 추가" : "맥에서 실행")
         .accessibilityAddTraits(.isButton)
         .accessibilityAction(named: "편집", onEdit)
+    }
+
+    /// 0.12초 동안 확실히 눌렸다 올라온다. 아이패드는 진동이 없어서 화면으로 보여줘야 한다
+    private func flashPress() {
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        tapFlash = true
+        Task {
+            try? await Task.sleep(for: .milliseconds(120))
+            tapFlash = false
+        }
     }
 
     // MARK: - 키캡
@@ -49,22 +67,34 @@ struct ButtonTile: View {
 
             RoundedRectangle(cornerRadius: radius)
                 .fill(LinearGradient(colors: [DeckTheme.keycapTop, DeckTheme.keycap], startPoint: .top, endPoint: .bottom))
+                // 눌리는 동안 윗면이 살짝 밝아진다
+                .overlay {
+                    RoundedRectangle(cornerRadius: radius).fill(.white.opacity(down ? 0.09 : 0))
+                }
                 .overlay {
                     RoundedRectangle(cornerRadius: radius)
-                        .strokeBorder(failed ? DeckTheme.failure : .white.opacity(0.06), lineWidth: failed ? 3 : 1)
+                        .strokeBorder(borderColor(button), lineWidth: failed || succeeded ? 3 : 1)
                 }
                 .overlay(alignment: .topLeading) {
                     Circle()
                         .fill(DeckTheme.accent(for: button.action))
                         .frame(width: side * 0.07, height: side * 0.07)
-                        .shadow(color: DeckTheme.accent(for: button.action).opacity(0.8), radius: pressed ? 6 : 3)
+                        .scaleEffect(down ? 1.35 : 1)
+                        .shadow(color: DeckTheme.accent(for: button.action), radius: down || succeeded ? 9 : 3)
                         .padding(side * 0.1)
                 }
                 .overlay { legend(button, side: side) }
-                .offset(y: pressed ? lip : 0)
+                .offset(y: down ? lip : 0)
         }
         .padding(.bottom, lip)
-        .animation(.spring(duration: 0.12), value: pressed)
+        .animation(.spring(duration: 0.12), value: down)
+        .animation(.easeOut(duration: 0.25), value: succeeded)
+    }
+
+    private func borderColor(_ button: DeckButton) -> Color {
+        if failed { return DeckTheme.failure }
+        if succeeded { return DeckTheme.accent(for: button.action) }
+        return .white.opacity(0.06)
     }
 
     @ViewBuilder
@@ -119,7 +149,7 @@ struct ButtonTile: View {
             .overlay {
                 RoundedRectangle(cornerRadius: side * 0.16)
                     .strokeBorder(style: StrokeStyle(lineWidth: 1.5, dash: [5, 5]))
-                    .foregroundStyle(.white.opacity(pressed ? 0.35 : 0.15))
+                    .foregroundStyle(.white.opacity(down ? 0.35 : 0.15))
             }
             .overlay {
                 Image(systemName: "plus")

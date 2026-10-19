@@ -147,6 +147,8 @@ struct VolumeKeyCap: View {
     let action: () -> Void
 
     @State private var pressed = false
+    @State private var tapFlash = false
+    private var down: Bool { pressed || tapFlash }
 
     var body: some View {
         let lip: CGFloat = 4
@@ -155,18 +157,27 @@ struct VolumeKeyCap: View {
             RoundedRectangle(cornerRadius: 12)
                 .fill(LinearGradient(colors: [DeckTheme.keycapTop, DeckTheme.keycap], startPoint: .top, endPoint: .bottom))
                 .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.white.opacity(0.06), lineWidth: 1))
+                .overlay { RoundedRectangle(cornerRadius: 12).fill(.white.opacity(down ? 0.09 : 0)) }
                 .overlay {
                     Image(systemName: symbol)
                         .font(.system(size: 20, weight: .semibold))
                         .foregroundStyle(lit ? DeckTheme.volume : DeckTheme.legend)
                 }
-                .offset(y: pressed ? lip : 0)
+                .offset(y: down ? lip : 0)
         }
         .frame(width: 56, height: 52)
         .padding(.bottom, lip)
-        .animation(.spring(duration: 0.1), value: pressed)
+        .animation(.spring(duration: 0.1), value: down)
         .contentShape(.rect)
-        .onTapGesture(perform: action)
+        .onTapGesture {
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            tapFlash = true
+            Task {
+                try? await Task.sleep(for: .milliseconds(120))
+                tapFlash = false
+            }
+            action()
+        }
         .onLongPressGesture(minimumDuration: 10) {} onPressingChanged: { pressed = $0 }
         .accessibilityElement()
         .accessibilityLabel(label)

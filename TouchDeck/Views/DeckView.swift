@@ -15,6 +15,8 @@ struct DeckView: View {
     @State private var page = 0
     @State private var editing: EditTarget?
     @State private var failure: DeckClient.PressFeedback?
+    /// 맥이 "실행했음"을 돌려준 버튼. 잠깐 테두리가 빛난다
+    @State private var success: DeckClient.PressFeedback?
     /// 스트림덱 / 숫자 키패드. 마지막에 고른 화면을 기억한다
     @AppStorage("screen") private var screen = Screen.deck
 
@@ -58,7 +60,15 @@ struct DeckView: View {
             EditSheet(client: client, target: target)
         }
         .onChange(of: client.lastResult) { _, result in
-            guard let result, !result.ok else { return }
+            guard let result else { return }
+            if result.ok {
+                success = result
+                Task {
+                    try? await Task.sleep(for: .milliseconds(700))
+                    if success == result { success = nil }
+                }
+                return
+            }
             failure = result
             UINotificationFeedbackGenerator().notificationOccurred(.error)
             Task {
@@ -106,6 +116,7 @@ struct DeckView: View {
                             button: button,
                             icon: appIcon(button),
                             failed: failure?.page == pageIndex && failure?.index == index,
+                            succeeded: success?.page == pageIndex && success?.index == index,
                             onTap: { client.press(page: pageIndex, index: index) },
                             onEdit: { editing = EditTarget(page: pageIndex, index: index, button: button) }
                         )
