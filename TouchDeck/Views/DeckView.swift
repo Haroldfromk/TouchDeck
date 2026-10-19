@@ -24,12 +24,12 @@ struct DeckView: View {
                 if landscape {
                     HStack(spacing: 18) {
                         pages(columns: DeckConstants.columns)
-                        VolumeKeys(client: client, vertical: true)
+                        VolumeStrip(client: client, vertical: true)
                             .frame(width: 76)
                     }
                 } else {
                     pages(columns: 3)
-                    VolumeKeys(client: client, vertical: false)
+                    VolumeStrip(client: client, vertical: false)
                         .frame(height: 64)
                 }
             }
