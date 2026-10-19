@@ -8,12 +8,28 @@ struct TouchDeckMacApp: App {
     init() {
         // 터미널이 아닌 파일로 로그를 받을 때도 줄마다 바로 쓰이게
         setvbuf(stdout, nil, _IOLBF, 0)
-        let server = DeckServer(actions: LiveActions())
+        let server = DeckServer(store: Self.debugStore() ?? ConfigStore(), random: Self.debugRandom(), actions: LiveActions())
         // 단위 테스트가 이 앱을 띄울 때는 서버를 열지 않는다 (진짜 서버와 포트가 겹친다)
         if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil {
             server.start()
         }
         _server = State(initialValue: server)
+    }
+
+    /// 디버그 빌드에서 끝까지 확인할 때만: 설정 파일 위치를 바꿔 실제 설정에 테스트 버튼이 남지 않게.
+    private static func debugStore() -> ConfigStore? {
+        #if DEBUG
+        if let path = ProcessInfo.processInfo.environment["TOUCHDECK_DEBUG_CONFIG"] { return ConfigStore(url: URL(filePath: path)) }
+        #endif
+        return nil
+    }
+
+    /// 디버그 빌드에서 UI 테스트가 숫자를 알 수 있게 페어링 숫자를 고정한다.
+    private static func debugRandom() -> (@Sendable () -> UInt32)? {
+        #if DEBUG
+        if let code = ProcessInfo.processInfo.environment["TOUCHDECK_DEBUG_PAIR_CODE"].flatMap(UInt32.init) { return { code } }
+        #endif
+        return nil
     }
 
     var body: some Scene {

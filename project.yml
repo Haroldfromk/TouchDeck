@@ -66,6 +66,16 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
         TEST_HOST: "$(BUILT_PRODUCTS_DIR)/TouchDeck.app/Contents/MacOS/TouchDeck"
         BUNDLE_LOADER: "$(TEST_HOST)"
+  TouchDeckUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [TouchDeckUITests]
+    dependencies:
+      - target: TouchDeck
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: TouchDeck
 schemes:
   TouchDeckMac:
     build:
@@ -78,3 +88,6 @@ schemes:
     build:
       targets:
         TouchDeck: all
+        TouchDeckUITests: [test]
+    test:
+      targets: [TouchDeckUITests]

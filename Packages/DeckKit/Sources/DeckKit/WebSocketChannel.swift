@@ -47,15 +47,18 @@ public final class WebSocketChannel: @unchecked Sendable {
     private func receiveNext() {
         connection.receiveMessage { [weak self] content, context, _, error in
             guard let self else { return }
-            if let content,
-               let meta = context?.protocolMetadata(definition: NWProtocolWebSocket.definition) as? NWProtocolWebSocket.Metadata,
-               meta.opcode == .text,
-               let text = String(data: content, encoding: .utf8) {
+            let meta = context?.protocolMetadata(definition: NWProtocolWebSocket.definition) as? NWProtocolWebSocket.Metadata
+            if let content, meta?.opcode == .text, let text = String(data: content, encoding: .utf8) {
                 self.onText?(text)
             }
-            if error == nil {
-                self.receiveNext()
+            // 상대가 사라지면 받기는 오류로 끝나지만 연결 상태는 ready로 남는다.
+            // 직접 닫아서 .cancelled를 알려야 다시 찾으러 갈 수 있다.
+            // 닫기 신호 없이 사라지면 오류도 내용도 없이 끝날 수 있다. 그것도 닫힘으로 본다.
+            if error != nil || meta?.opcode == .close || (content == nil && meta == nil) {
+                self.connection.cancel()
+                return
             }
+            self.receiveNext()
         }
     }
 }

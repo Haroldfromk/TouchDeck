@@ -32,12 +32,13 @@ final class DeckServer {
     private var listener: NWListener?
     private var sessions: [ClientSession] = []
 
-    init(store: ConfigStore = ConfigStore(), actions: DeckActions) {
+    init(store: ConfigStore = ConfigStore(), random: (@Sendable () -> UInt32)? = nil, actions: DeckActions) {
         self.store = store
         self.actions = actions
         let config = store.load()
         self.config = config
-        self.authority = PairingAuthority(trusted: config.trustedDevices)
+        self.authority = random.map { PairingAuthority(trusted: config.trustedDevices, random: $0) }
+            ?? PairingAuthority(trusted: config.trustedDevices)
         self.trusted = config.trustedDevices
     }
 
