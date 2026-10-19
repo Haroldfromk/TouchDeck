@@ -39,6 +39,8 @@ final class DeckClient {
     private(set) var volumeKeysAllowed = true
     private(set) var lastResult: PressFeedback?
     private(set) var folderListing: FolderListing?
+    /// 지금 맥과 붙어 있는 길 (같은 와이파이 / 직접 연결 등)
+    private(set) var route: ConnectionRoute?
 
     struct FolderListing: Equatable {
         let path: String
@@ -177,6 +179,13 @@ final class DeckClient {
                 self.connectionChanged(state)
             }
         }
+        // 같은 와이파이에서 직접 연결로 바뀌는 것처럼 길이 바뀌면 표시도 바꾼다
+        channel.connection.pathUpdateHandler = { [weak self, weak channel] path in
+            MainActor.assumeIsolated {
+                guard let self, let channel, channel === self.channel else { return }
+                self.route = ConnectionRoute(path: path)
+            }
+        }
         self.channel = channel
         channel.start(queue: .main)
     }
@@ -197,6 +206,7 @@ final class DeckClient {
     private func reconnectLater() {
         channel?.cancel()
         channel = nil
+        route = nil
         secure = nil
         pendingPairing = nil
         if phase != .localNetworkDenied { phase = .searching }

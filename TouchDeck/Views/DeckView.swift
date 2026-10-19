@@ -28,7 +28,7 @@ struct DeckView: View {
             let landscape = geo.size.width > geo.size.height
             VStack(spacing: 14) {
                 HStack(spacing: 16) {
-                    ConnectionStatusView(phase: client.phase)
+                    ConnectionStatusView(phase: client.phase, route: client.route)
                     Picker("화면", selection: $screen) {
                         ForEach(Screen.allCases, id: \.self) { Text($0.rawValue).tag($0) }
                     }

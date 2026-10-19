@@ -1,8 +1,10 @@
+import DeckKit
 import SwiftUI
 
 /// 위쪽 한 줄 상태. 연결됐을 땐 조용히, 안 됐을 땐 무엇을 해야 하는지 알려준다.
 struct ConnectionStatusView: View {
     let phase: DeckClient.Phase
+    var route: ConnectionRoute?
 
     var body: some View {
         HStack(spacing: 10) {
@@ -13,6 +15,14 @@ struct ConnectionStatusView: View {
             Text(text)
                 .font(.subheadline.weight(.medium))
                 .foregroundStyle(DeckTheme.legend)
+            if case .connected = phase, let route {
+                Label(route.label, systemImage: route.symbol)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(DeckTheme.legendDim)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(DeckTheme.socket, in: .capsule)
+            }
             Spacer()
             if case .localNetworkDenied = phase {
                 Button("설정 열기") {
