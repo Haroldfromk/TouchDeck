@@ -70,7 +70,19 @@ final class LiveActions: DeckActions {
         MediaKey.press(key)
     }
 
+    private var pendingVolume: Int?
+    private var settingVolume = false
+
+    /// 아이패드에서 끄는 동안 값이 계속 온다. BetterDisplay 쪽은 한 번에 0.2초쯤 걸려서,
+    /// 쓰는 중에 온 값은 마지막 것만 남겨 두었다가 이어서 쓴다.
     func setVolume(_ value: Int) async {
-        await Task.detached { VolumeController.set(value) }.value
+        pendingVolume = value
+        guard !settingVolume else { return }
+        settingVolume = true
+        while let next = pendingVolume {
+            pendingVolume = nil
+            await Task.detached { VolumeController.set(next) }.value
+        }
+        settingVolume = false
     }
 }

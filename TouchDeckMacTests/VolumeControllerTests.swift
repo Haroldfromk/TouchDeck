@@ -21,3 +21,26 @@ import Testing
 @Test func normalOutputIsAvailable() {
     #expect(VolumeController.parse("output volume:50, output muted:false").available)
 }
+
+// MARK: - BetterDisplay (DisplayPort 모니터 볼륨)
+
+@Test func parsesBetterDisplayVolume() {
+    // BetterDisplay get -volume 은 0~1 사이 값을 돌려준다
+    #expect(VolumeController.parseBetterDisplayVolume("0.063\n") == 6)
+    #expect(VolumeController.parseBetterDisplayVolume("1") == 100)
+    #expect(VolumeController.parseBetterDisplayVolume("Failed.\n") == nil)
+}
+
+@Test func formatsBetterDisplayVolume() {
+    #expect(VolumeController.betterDisplayVolumeArgument(55) == "0.55")
+    #expect(VolumeController.betterDisplayVolumeArgument(150) == "1.00")
+    #expect(VolumeController.betterDisplayVolumeArgument(-3) == "0.00")
+}
+
+@Test func choosesSourceInOrder() {
+    // macOS가 값을 알면 macOS, 아니면 BetterDisplay, 둘 다 아니면 없음(볼륨 키로)
+    #expect(VolumeController.chooseSource(systemAvailable: true, outputName: "LG ULTRAWIDE", betterDisplayRunning: true) == .system)
+    #expect(VolumeController.chooseSource(systemAvailable: false, outputName: "LG ULTRAWIDE", betterDisplayRunning: true) == .betterDisplay(name: "LG ULTRAWIDE"))
+    #expect(VolumeController.chooseSource(systemAvailable: false, outputName: "LG ULTRAWIDE", betterDisplayRunning: false) == .none)
+    #expect(VolumeController.chooseSource(systemAvailable: false, outputName: nil, betterDisplayRunning: true) == .none)
+}

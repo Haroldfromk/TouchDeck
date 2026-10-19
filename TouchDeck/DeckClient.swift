@@ -43,6 +43,10 @@ final class DeckClient {
     private var channel: WebSocketChannel?
     private var macName = ""
 
+    private var pendingVolume: Int?
+    private var volumeTask: Task<Void, Never>?
+    private var lastLocalVolumeChange = Date.distantPast
+
     // 이번 접속의 키 교환/서명 상태. 접속이 바뀌면 전부 새로 시작한다.
     private var clientNonce = ""
     private var macNonce = ""
@@ -83,6 +87,21 @@ final class DeckClient {
     }
     func setButton(_ button: DeckButton, page: Int, index: Int) { send(.setButton(page: page, index: index, button: button)) }
     func clearButton(page: Int, index: Int) { send(.clearButton(page: page, index: index)) }
+
+    /// 게이지로 값을 정한다. 끄는 동안 메시지가 쏟아지지 않게 0.1초에 한 번만 보내고,
+    /// 맥이 읽어 온 옛 값이 끄는 중인 게이지를 되돌리지 않게 마지막으로 만진 뒤 2초는 맥 값을 무시한다.
+    func setVolume(_ value: Int) {
+        volume = value
+        pendingVolume = value
+        lastLocalVolumeChange = .now
+        guard volumeTask == nil else { return }
+        volumeTask = Task {
+            try? await Task.sleep(for: .milliseconds(100))
+            if let value = pendingVolume { send(.setVolume(value)) }
+            pendingVolume = nil
+            volumeTask = nil
+        }
+    }
 
     /// 키보드 볼륨 키처럼 올림/내림/음소거만 보낸다. 맥이 같은 신호를 내서 macOS나 BetterDisplay가 받는다.
     func pressVolumeKey(_ key: VolumeKey) { send(.volumeKey(key)) }
@@ -243,7 +262,7 @@ final class DeckClient {
         case .pressResult(let page, let index, let ok, let message):
             lastResult = PressFeedback(page: page, index: index, ok: ok, message: message)
         case .volume(let value, let muted, let available, let keysAllowed):
-            volume = value
+            if Date.now.timeIntervalSince(lastLocalVolumeChange) > 2 { volume = value }
             self.muted = muted
             volumeAvailable = available
             volumeKeysAllowed = keysAllowed

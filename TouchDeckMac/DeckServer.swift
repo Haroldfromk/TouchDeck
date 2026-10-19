@@ -34,6 +34,8 @@ final class DeckServer {
     private var authority: PairingAuthority
     private var listener: NWListener?
     private var sessions: [ClientSession] = []
+    private var lastVolume: (value: Int, muted: Bool, available: Bool, keysAllowed: Bool)?
+    private var volumeWatch: Task<Void, Never>?
 
     init(store: ConfigStore = ConfigStore(), random: (@Sendable () -> UInt32)? = nil, actions: DeckActions) {
         self.store = store
@@ -57,6 +59,7 @@ final class DeckServer {
             }
             listener.start(queue: .main)
             self.listener = listener
+            watchVolume()
         } catch {
             status = "시작 실패: \(error)"
             print("[server] start failed:", error)
@@ -285,7 +288,23 @@ final class DeckServer {
 
     private func broadcastVolume() async {
         let volume = await actions.volume()
+        lastVolume = volume
         broadcast(.volume(value: volume.value, muted: volume.muted, available: volume.available, keysAllowed: volume.keysAllowed))
+    }
+
+    /// 키보드나 다른 앱으로 소리를 바꿔도 아이패드 게이지가 따라오게, 붙어 있는 기기가 있을 때만 3초마다 확인한다.
+    /// (BetterDisplay에게 묻는 데 1초쯤 걸려서 더 자주 하지 않는다)
+    private func watchVolume() {
+        volumeWatch = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(3))
+                guard let self, self.sessions.contains(where: { $0.stage == .authorized }) else { continue }
+                let volume = await self.actions.volume()
+                if let last = self.lastVolume, last == volume { continue }
+                self.lastVolume = volume
+                self.broadcast(.volume(value: volume.value, muted: volume.muted, available: volume.available, keysAllowed: volume.keysAllowed))
+            }
+        }
     }
 
     private func editLayout(_ session: ClientSession, _ edit: (inout DeckLayout) throws -> Void) {

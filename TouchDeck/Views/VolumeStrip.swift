@@ -1,9 +1,9 @@
 import DeckKit
 import SwiftUI
 
-/// 위아래(아이폰은 좌우)로 끄는 볼륨 띠와 음소거 키.
-/// 볼륨 키 신호는 "한 칸 올려/내려"만 할 수 있어서, 끈 거리만큼 키를 대신 누른다.
-/// 손을 떼면 손잡이는 가운데로 돌아온다. macOS가 값을 알면(맥북 스피커 등) 띠 안에 지금 값을 채워 보여준다.
+/// 볼륨 게이지와 음소거 키.
+/// 맥이 실제 값을 알면(macOS가 아는 장치, 또는 BetterDisplay가 켜진 모니터) 값만큼 차오르는 게이지로 값을 정한다.
+/// 모르면 끄는 띠로 볼륨 키 신호를 보낸다 (한 칸씩만 올리고 내릴 수 있다).
 struct VolumeStrip: View {
     let client: DeckClient
     let vertical: Bool
@@ -11,8 +11,11 @@ struct VolumeStrip: View {
     var body: some View {
         let layout = vertical ? AnyLayout(VStackLayout(spacing: 12)) : AnyLayout(HStackLayout(spacing: 12))
         layout {
-            DragStrip(vertical: vertical, level: client.volumeAvailable ? (client.muted ? 0 : client.volume) : nil,
-                      onKey: client.pressVolumeKey)
+            if client.volumeAvailable {
+                VolumeGauge(vertical: vertical, value: client.volume, muted: client.muted, onChange: client.setVolume)
+            } else {
+                DragStrip(vertical: vertical, onKey: client.pressVolumeKey)
+            }
             VolumeKeyCap(symbol: client.muted ? "speaker.slash.fill" : "speaker.fill", label: "음소거", lit: client.muted) {
                 client.pressVolumeKey(.mute)
             }
@@ -23,10 +26,64 @@ struct VolumeStrip: View {
     }
 }
 
+/// 실제 소리 크기만큼 차오르는 게이지. 누르거나 끈 위치가 곧 값이다.
+private struct VolumeGauge: View {
+    let vertical: Bool
+    let value: Int
+    let muted: Bool
+    let onChange: (Int) -> Void
+
+    @State private var lastHapticValue = -1
+    private let haptic = UIImpactFeedbackGenerator(style: .light)
+
+    var body: some View {
+        GeometryReader { geo in
+            let length = vertical ? geo.size.height : geo.size.width
+            let fraction = CGFloat(value) / 100
+            ZStack(alignment: vertical ? .bottom : .leading) {
+                RoundedRectangle(cornerRadius: 14).fill(DeckTheme.keyLip)
+                RoundedRectangle(cornerRadius: 14)
+                    .fill(LinearGradient(colors: [DeckTheme.volume, DeckTheme.volume.opacity(0.6)],
+                                         startPoint: vertical ? .top : .trailing, endPoint: vertical ? .bottom : .leading))
+                    .opacity(muted ? 0.3 : 1)
+                    .frame(width: vertical ? nil : length * fraction, height: vertical ? length * fraction : nil)
+                    .animation(.easeOut(duration: 0.15), value: value)
+                // 10% 눈금
+                ForEach(1..<10, id: \.self) { i in
+                    Rectangle().fill(.white.opacity(0.08))
+                        .frame(width: vertical ? nil : 1, height: vertical ? 1 : nil)
+                        .offset(x: vertical ? 0 : length * CGFloat(i) / 10, y: vertical ? -length * CGFloat(i) / 10 : 0)
+                }
+                Text(muted ? "음소거" : "\(value)")
+                    .font(.system(.title3, design: .rounded).monospacedDigit().weight(.bold))
+                    .foregroundStyle(DeckTheme.legend)
+                    .shadow(color: .black.opacity(0.4), radius: 2)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: vertical ? .top : .trailing)
+                    .padding(vertical ? .top : .trailing, 10)
+            }
+            .contentShape(.rect)
+            .gesture(DragGesture(minimumDistance: 0).onChanged { drag in
+                let position = vertical ? length - drag.location.y : drag.location.x
+                let next = Int((min(max(position / length, 0), 1) * 100).rounded())
+                guard next != value else { return }
+                onChange(next)
+                // 10% 눈금을 넘을 때마다 짧게 진동
+                if next / 10 != lastHapticValue / 10 { haptic.impactOccurred() }
+                lastHapticValue = next
+            })
+        }
+        .frame(width: vertical ? 56 : nil, height: vertical ? nil : 56)
+        .accessibilityElement()
+        .accessibilityLabel("소리 크기")
+        .accessibilityValue(muted ? "음소거" : "\(value)")
+        .accessibilityAdjustableAction { direction in
+            onChange(min(max(value + (direction == .increment ? 5 : -5), 0), 100))
+        }
+    }
+}
+
 private struct DragStrip: View {
     let vertical: Bool
-    /// 0~100. 맥이 값을 모르면 nil
-    let level: Int?
     let onKey: (VolumeKey) -> Void
 
     @State private var drag = VolumeDrag(step: 16)
@@ -40,13 +97,6 @@ private struct DragStrip: View {
             let travel = max(length / 2 - knob / 2 - 4, 0)
             ZStack {
                 Capsule().fill(DeckTheme.keyLip)
-                if let level {
-                    // 지금 값: 아래(아이폰은 왼쪽)부터 채운다
-                    Capsule().fill(DeckTheme.volume.opacity(0.55))
-                        .frame(width: vertical ? nil : length * CGFloat(level) / 100,
-                               height: vertical ? length * CGFloat(level) / 100 : nil)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: vertical ? .bottom : .leading)
-                }
                 // 끄는 방향 안내
                 Image(systemName: vertical ? "chevron.up" : "chevron.right")
                     .font(.caption.weight(.bold)).foregroundStyle(DeckTheme.legendDim)
@@ -82,7 +132,7 @@ private struct DragStrip: View {
         .frame(width: vertical ? 56 : nil, height: vertical ? nil : 56)
         .accessibilityElement()
         .accessibilityLabel("소리 크기")
-        .accessibilityValue(level.map { "\($0)" } ?? "값 모름")
+        .accessibilityValue("값 모름")
         .accessibilityAdjustableAction { direction in
             onKey(direction == .increment ? .up : .down)
         }
