@@ -9,6 +9,7 @@ final class AudioPlayer {
     private let player = AVAudioPlayerNode()
     /// 플레이어를 이은 형식. 맥이 다른 형식을 보내면 다시 잇는다
     private var format: AVAudioFormat?
+    private var limits = AudioJitter.Limits.home
     private var jitter = AudioJitter()
     private var running = false
     /// 멈추거나 다시 이은 뒤 늦게 오는 "다 틀었다" 알림을 무시한다
@@ -22,8 +23,11 @@ final class AudioPlayer {
         }
     }
 
-    func start() {
+    /// remote: 원격(LTE)이면 더 쌓아 두고 튼다. 연결이 바뀌면 stop() 뒤 다시 불린다
+    func start(remote: Bool) {
         guard !running else { return }
+        limits = remote ? .remote : .home
+        jitter = AudioJitter(limits: limits)
         let session = AVAudioSession.sharedInstance()
         // 무음 스위치를 켜 둬도 들리게
         try? session.setCategory(.playback, mode: .default)
@@ -98,12 +102,12 @@ final class AudioPlayer {
     private func reset() {
         generation += 1
         player.stop()
-        jitter = AudioJitter()
+        jitter = AudioJitter(limits: limits)
     }
 
     private func played(_ seconds: Double, generation current: Int) {
         guard current == generation else { return }
-        // 다 틀어서 비었으면 멈추고, 다시 0.06초가 쌓이면 튼다
+        // 다 틀어서 비었으면 멈추고, 다시 쌓이면(집 0.06초, 원격 0.2초) 튼다
         if jitter.finished(seconds) { player.pause() }
     }
 }

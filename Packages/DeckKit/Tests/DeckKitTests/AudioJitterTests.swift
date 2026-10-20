@@ -34,3 +34,21 @@ import Testing
     #expect(jitter.playing == false)
     #expect(jitter.arrive(0.02) == .queue)
 }
+
+@Test func remoteWaitsTwoHundredMsAndHoldsSixHundred() {
+    var jitter = AudioJitter(limits: .remote)
+    for _ in 0..<9 { #expect(jitter.arrive(0.02) == .queue) }   // 0.18
+    #expect(jitter.arrive(0.02) == .queueAndStart)              // 0.2
+    for _ in 0..<20 { _ = jitter.arrive(0.02) }                 // 0.6
+    #expect(jitter.arrive(0.02) == .drop)
+}
+
+@Test func remoteResumesBelowThreeHundredMs() {
+    var jitter = AudioJitter(limits: .remote)
+    for _ in 0..<30 { _ = jitter.arrive(0.02) }
+    _ = jitter.arrive(0.02)                         // 버리기 시작
+    for _ in 0..<15 { _ = jitter.finished(0.02) }   // 0.3 남음
+    #expect(jitter.arrive(0.02) == .drop)
+    _ = jitter.finished(0.02)                       // 0.28
+    #expect(jitter.arrive(0.02) == .queue)
+}

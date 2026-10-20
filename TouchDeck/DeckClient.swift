@@ -233,7 +233,7 @@ final class DeckClient {
         screenNotice = nil
         video.reset()
         let settings = screenSettings
-        if settings.audio { audioPlayer.start() }
+        if settings.audio { audioPlayer.start(remote: shownRoute == .vpn) }
         send(.startScreen(displayId: displayId, maxSide: settings.maxSide, fps: settings.fps, audio: settings.audio,
                           bitrateCap: settings.bitrateCap))
     }
@@ -251,7 +251,7 @@ final class DeckClient {
             UserDefaults.standard.set(audio, forKey: "screen.audio")
         }
         let settings = screenSettings
-        if settings.audio { audioPlayer.start() } else { audioPlayer.stop() }
+        if settings.audio { audioPlayer.start(remote: shownRoute == .vpn) } else { audioPlayer.stop() }
         if isConnected { send(.screenOptions(fps: settings.fps, audio: settings.audio, bitrateCap: settings.bitrateCap)) }
     }
 
