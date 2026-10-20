@@ -5,6 +5,7 @@ import SwiftUI
 struct ConnectionStatusView: View {
     let phase: DeckClient.Phase
     var route: ConnectionRoute?
+    var remoteFailed = false
 
     var body: some View {
         HStack(spacing: 10) {
@@ -34,7 +35,7 @@ struct ConnectionStatusView: View {
         .frame(height: 24)
     }
 
-    private var text: String {
+    private var phaseText: String {
         switch phase {
         case .searching: "같은 와이파이에서 맥을 찾는 중 (맥에서 TouchDeck을 켜 두세요)"
         case .connecting(let name): "\(name)에 연결하는 중"
@@ -42,13 +43,22 @@ struct ConnectionStatusView: View {
         case .pairingLocked(let name): "\(name)에서 새 기기 허락이 멈춰 있어요"
         case .connected(let name): "\(name)에 연결됨"
         case .localNetworkDenied: "로컬 네트워크 권한이 꺼져 있어요. 설정 > 개인정보 보호 및 보안 > 로컬 네트워크에서 TouchDeck을 켜세요"
+        case .needsHomePairing: "집 와이파이에서 먼저 허락받아 주세요"
+        }
+    }
+
+    private var text: String {
+        switch phase {
+        case .searching, .connecting:
+            remoteFailed ? "밖에서 맥에 붙지 못했어요. 아이패드와 맥에서 Tailscale이 켜져 있는지 확인해 주세요" : phaseText
+        default: phaseText
         }
     }
 
     private var color: Color {
         switch phase {
         case .connected: DeckTheme.command
-        case .localNetworkDenied: DeckTheme.failure
+        case .localNetworkDenied, .needsHomePairing: DeckTheme.failure
         default: DeckTheme.terminal
         }
     }

@@ -17,6 +17,8 @@ final class DeckClient {
         case pairingLocked(String)
         case connected(String)
         case localNetworkDenied
+        /// 밖에서 붙었는데 이 기기가 아직 허락받지 않았다. 페어링은 집 와이파이에서만
+        case needsHomePairing(String)
     }
 
     struct PressFeedback: Equatable {
@@ -64,9 +66,25 @@ final class DeckClient {
     @ObservationIgnored let audioPlayer = AudioPlayer()
     /// 맥 앱의 기능 번호(허락받을 때 알려 준다). 그 전이나 끊긴 뒤엔 nil
     private(set) var macProtocol: Int?
-    /// 화면 보기 30/60과 소리. 마지막에 고른 값을 기억한다
-    private(set) var screenFPS = UserDefaults.standard.object(forKey: "screen.fps") as? Int ?? ScreenFPS.high
-    private(set) var screenAudio = UserDefaults.standard.object(forKey: "screen.audio") as? Bool ?? true
+    /// 화면 보기 30/60과 소리. 집에서 마지막에 고른 값을 기억한다
+    private var savedFPS = UserDefaults.standard.object(forKey: "screen.fps") as? Int ?? ScreenFPS.high
+    private var savedAudio = UserDefaults.standard.object(forKey: "screen.audio") as? Bool ?? true
+    /// 원격 중에 툴바에서 바꾼 값. 그 연결 동안만 쓰고 기억하지 않는다
+    private var remoteOverride: (fps: Int, audio: Bool)?
+    /// 툴바가 보여 줄 지금 값 (원격이면 원격 값)
+    var screenFPS: Int { screenSettings.fps }
+    var screenAudio: Bool { screenSettings.audio }
+
+    /// 밖에서 붙을 맥 주소 (Tailscale). nil이면 집에서만 쓴다
+    private(set) var remoteHost = UserDefaults.standard.string(forKey: "remote.host")
+    /// 지금 연결이 원격 주소로 붙은 것인지
+    private(set) var isRemote = false
+    /// 원격 주소로 붙으려다 실패했다. 붙으면 다시 false
+    private(set) var remoteFailed = false
+    @ObservationIgnored private var searchStarted = Date.now
+    @ObservationIgnored private var remoteTimer: Task<Void, Never>?
+    /// 로컬 네트워크 권한이 꺼져 Bonjour가 막혔다 (이번 찾기에서)
+    @ObservationIgnored private var bonjourDenied = false
     @ObservationIgnored private var lastKeyframeRequest = Date.distantPast
 
     struct FolderListing: Equatable {
@@ -90,6 +108,11 @@ final class DeckClient {
     private var pendingPairing: PairingCrypto.Derived?
     private var secure: SecureChannel?
 
+    private var isHomePairingNeeded: Bool {
+        if case .needsHomePairing = phase { return true }
+        return false
+    }
+
     var isConnected: Bool {
         if case .connected = phase { return true }
         return false
@@ -97,6 +120,15 @@ final class DeckClient {
 
     func start() {
         guard browser == nil else { return }
+        searchStarted = .now
+        bonjourDenied = false
+        // Bonjour로 3초 안에 못 찾으면 원격 주소로 간다
+        remoteTimer?.cancel()
+        remoteTimer = Task {
+            try? await Task.sleep(for: .seconds(RemotePlan.wait))
+            guard !Task.isCancelled else { return }
+            tryRemote()
+        }
         let browser = NWBrowser(for: .bonjour(type: DeckConstants.serviceType, domain: nil), using: DeckNetwork.browseParameters())
         browser.stateUpdateHandler = { [weak self] state in
             MainActor.assumeIsolated { self?.browserChanged(state) }
@@ -106,6 +138,25 @@ final class DeckClient {
         }
         browser.start(queue: .main)
         self.browser = browser
+    }
+
+    /// 입력한 주소를 다듬어 저장한다. 빈 입력은 지우기. 저장 못 하면 이유를 돌려준다
+    func setRemoteHost(_ input: String) -> String? {
+        if input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            remoteHost = nil
+            remoteFailed = false
+            UserDefaults.standard.removeObject(forKey: "remote.host")
+            return nil
+        }
+        guard let host = RemoteAddress.clean(input), RemoteAddress.url(host: host) != nil else {
+            return "주소에 빈칸이 있으면 안 돼요. 맥 이름이나 100으로 시작하는 주소만 넣어 주세요"
+        }
+        remoteHost = host
+        remoteFailed = false
+        UserDefaults.standard.set(host, forKey: "remote.host")
+        // 이미 찾는 중이면 3초를 다시 기다리지 않고 바로 판단한다
+        tryRemote()
+        return nil
     }
 
     // MARK: - 보내기
@@ -176,22 +227,40 @@ final class DeckClient {
     }
 
     /// 이 기기 화면의 실제 픽셀 크기로 받는다. 그보다 작게 받으면 늘려서 보여주느라 글자가 흐려진다
+    /// 원격이면 LTE에서도 버티게 낮춘 값 (ScreenQuality)
     func startScreen(_ displayId: UInt32) {
         guard isConnected else { return }
         screenNotice = nil
         video.reset()
-        if screenAudio { audioPlayer.start() }
-        send(.startScreen(displayId: displayId, maxSide: screenPixelLongSide, fps: screenFPS, audio: screenAudio, bitrateCap: nil))
+        let settings = screenSettings
+        if settings.audio { audioPlayer.start() }
+        send(.startScreen(displayId: displayId, maxSide: settings.maxSide, fps: settings.fps, audio: settings.audio,
+                          bitrateCap: settings.bitrateCap))
     }
 
-    /// 보기 화면 툴바에서 30/60이나 소리를 바꿨다. 보고 있지 않으면 맥이 무시한다
+    /// 보기 화면 툴바에서 30/60이나 소리를 바꿨다. 보고 있지 않으면 맥이 무시한다.
+    /// 원격 중에 바꾼 값은 그 연결 동안만 쓰고, 집에서 고른 값은 그대로 둔다
     func setScreenOptions(fps: Int, audio: Bool) {
-        screenFPS = ScreenFPS.normalize(fps)
-        screenAudio = audio
-        UserDefaults.standard.set(screenFPS, forKey: "screen.fps")
-        UserDefaults.standard.set(audio, forKey: "screen.audio")
-        if audio { audioPlayer.start() } else { audioPlayer.stop() }
-        if isConnected { send(.screenOptions(fps: screenFPS, audio: audio, bitrateCap: nil)) }
+        let fps = ScreenFPS.normalize(fps)
+        if screenRoute == .vpn {
+            remoteOverride = (fps, audio)
+        } else {
+            savedFPS = fps
+            savedAudio = audio
+            UserDefaults.standard.set(fps, forKey: "screen.fps")
+            UserDefaults.standard.set(audio, forKey: "screen.audio")
+        }
+        let settings = screenSettings
+        if settings.audio { audioPlayer.start() } else { audioPlayer.stop() }
+        if isConnected { send(.screenOptions(fps: settings.fps, audio: settings.audio, bitrateCap: settings.bitrateCap)) }
+    }
+
+    /// 원격 주소로 붙었으면 길 표시가 무엇이든 원격으로 친다
+    private var screenRoute: ConnectionRoute? { isRemote ? .vpn : route }
+
+    private var screenSettings: ScreenSettings {
+        ScreenQuality.settings(route: screenRoute, deviceLongSide: screenPixelLongSide, savedFPS: savedFPS,
+                               savedAudio: savedAudio, remoteOverride: remoteOverride)
     }
 
     /// 11인치 아이패드는 2388, 12.9인치는 2732
@@ -270,7 +339,12 @@ final class DeckClient {
         case .waiting(let error), .failed(let error):
             // 로컬 네트워크 권한을 거부하면 Bonjour가 PolicyDenied(-65570)로 막힌다 (TN3179)
             if case .dns(let code) = error, code == -65570 || code == -65555 {
+                bonjourDenied = true
+                // 원격으로 붙어 있으면 그 상태를 지운다
+                guard channel == nil else { return }
                 phase = .localNetworkDenied
+                // Tailscale 주소는 로컬 네트워크가 아니라 이 권한과 상관없다
+                tryRemote()
             }
         default:
             break
@@ -283,7 +357,19 @@ final class DeckClient {
         connect(to: result.endpoint)
     }
 
-    private func connect(to endpoint: NWEndpoint) {
+    /// Bonjour로 못 찾았고 원격 주소가 있으면 그리로 붙는다. 이미 채널이 있으면 아무것도 안 한다
+    private func tryRemote() {
+        // 허락 안 된 기기면 밖에서 다시 붙어 봐야 같은 답이다. 집에 와서 Bonjour로 찾을 때까지 쉰다
+        guard channel == nil, browser != nil, !isHomePairingNeeded else { return }
+        let step = RemotePlan.next(bonjourFound: false, waited: Date.now.timeIntervalSince(searchStarted),
+                                   remoteHost: remoteHost, localNetworkDenied: bonjourDenied)
+        guard case .useRemote(let host) = step, let url = RemoteAddress.url(host: host) else { return }
+        macName = host
+        connect(to: .url(url), remote: true)
+    }
+
+    private func connect(to endpoint: NWEndpoint, remote: Bool = false) {
+        isRemote = remote
         phase = .connecting(macName)
         // Bonjour 서비스 엔드포인트로 바로 WebSocket을 열 수 있다 (host:port로는 안 열렸다)
         let channel = WebSocketChannel(connection: NWConnection(to: endpoint, using: DeckNetwork.parameters()))
@@ -316,6 +402,8 @@ final class DeckClient {
         case .ready:
             sayHello()
         case .waiting, .failed, .cancelled:
+            // 허락까지 못 가고 끝난 원격 연결은 Tailscale 쪽 문제일 가능성이 크다
+            if isRemote, !isConnected, state != .cancelled { remoteFailed = true }
             reconnectLater()
         default:
             break
@@ -334,7 +422,14 @@ final class DeckClient {
         video.reset()
         audioPlayer.stop()
         macProtocol = nil
-        if phase != .localNetworkDenied { phase = .searching }
+        isRemote = false
+        remoteOverride = nil
+        remoteTimer?.cancel()
+        // 권한 안내와 "집에서 먼저 허락" 안내는 다시 찾는 동안에도 남겨 둔다
+        switch phase {
+        case .localNetworkDenied, .needsHomePairing: break
+        default: phase = .searching
+        }
         browser?.cancel()
         browser = nil
         Task {
@@ -373,6 +468,11 @@ final class DeckClient {
             secure = nil
             macPairingKey = Data(base64Encoded: publicKey)
             macNonce = nonce
+            if isRemote {
+                // 밖에서는 숫자를 보여 주지 않는다. 끊고 다시 찾아, 집에 오면 Bonjour로 허락받게 한다
+                phase = .needsHomePairing(macName)
+                return reconnectLater()
+            }
             phase = .needsPairing(macName)
         case .pairingFailed(let remaining):
             phase = .pairingFailed(macName, remaining: remaining)
@@ -397,6 +497,7 @@ final class DeckClient {
             secure = SecureChannel(keys: keys, role: .client)
         case .authorized(let protocolVersion):
             macProtocol = protocolVersion
+            remoteFailed = false
             phase = .connected(macName)
         case .unauthorized:
             // 허락 전에 보낸 요청이거나, 맥 메뉴에서 허락을 취소했다. 처음부터 다시 인사한다.

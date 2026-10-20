@@ -14,6 +14,7 @@ struct DeckView: View {
     @Bindable var client: DeckClient
     @State private var page = 0
     @State private var editing: EditTarget?
+    @State private var showRemote = false
     @State private var failure: DeckClient.PressFeedback?
     /// 맥이 "실행했음"을 돌려준 버튼. 잠깐 테두리가 빛난다
     @State private var success: DeckClient.PressFeedback?
@@ -32,7 +33,11 @@ struct DeckView: View {
             VStack(spacing: 14) {
                 HStack(spacing: 16) {
                     VStack(alignment: .leading, spacing: 4) {
-                        ConnectionStatusView(phase: client.phase, route: client.route)
+                        // 상태 줄을 누르면 밖에서 붙을 맥 주소를 넣는다
+                        Button { showRemote = true } label: {
+                            ConnectionStatusView(phase: client.phase, route: client.route, remoteFailed: client.remoteFailed)
+                        }
+                        .buttonStyle(.plain)
                         if client.macNeedsUpdate {
                             Label("맥 TouchDeck을 새 버전으로 설치해 주세요", systemImage: "arrow.down.circle")
                                 .font(.caption.weight(.medium))
@@ -44,29 +49,34 @@ struct DeckView: View {
                     }
                     .pickerStyle(.segmented)
                     .fixedSize()
+                    .disabled(!client.isConnected)
                 }
                 // 맥 화면 탭은 모니터 카드를 넓게 쓰려고 볼륨 칸을 숨긴다
-                if screen == .screen {
-                    main(columns: DeckConstants.columns)
-                } else if landscape {
-                    HStack(spacing: 18) {
+                // 상태 줄은 끊겨 있을 때도 눌려야 해서(원격 주소 넣기) 아래쪽만 막는다
+                Group {
+                    if screen == .screen {
                         main(columns: DeckConstants.columns)
-                        VolumeStrip(client: client, vertical: true)
-                            .frame(width: 76)
+                    } else if landscape {
+                        HStack(spacing: 18) {
+                            main(columns: DeckConstants.columns)
+                            VolumeStrip(client: client, vertical: true)
+                                .frame(width: 76)
+                        }
+                    } else {
+                        main(columns: 3)
+                        VolumeStrip(client: client, vertical: false)
+                            .frame(height: 64)
                     }
-                } else {
-                    main(columns: 3)
-                    VolumeStrip(client: client, vertical: false)
-                        .frame(height: 64)
                 }
+                .disabled(!client.isConnected)
             }
             .padding(20)
-            .disabled(!client.isConnected)
             .opacity(client.isConnected ? 1 : 0.55)
         }
         .background(DeckTheme.body.ignoresSafeArea())
         .overlay(alignment: .bottom) { failureBanner }
         .overlay(alignment: .bottom) { volumePermissionBanner }
+        .sheet(isPresented: $showRemote) { RemoteSettingsSheet(client: client) }
         .sheet(item: $editing) { target in
             EditSheet(client: client, target: target)
         }
