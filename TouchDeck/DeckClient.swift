@@ -181,7 +181,7 @@ final class DeckClient {
         screenNotice = nil
         video.reset()
         if screenAudio { audioPlayer.start() }
-        send(.startScreen(displayId: displayId, maxSide: screenPixelLongSide, fps: screenFPS, audio: screenAudio))
+        send(.startScreen(displayId: displayId, maxSide: screenPixelLongSide, fps: screenFPS, audio: screenAudio, bitrateCap: nil))
     }
 
     /// 보기 화면 툴바에서 30/60이나 소리를 바꿨다. 보고 있지 않으면 맥이 무시한다
@@ -191,7 +191,7 @@ final class DeckClient {
         UserDefaults.standard.set(screenFPS, forKey: "screen.fps")
         UserDefaults.standard.set(audio, forKey: "screen.audio")
         if audio { audioPlayer.start() } else { audioPlayer.stop() }
-        if isConnected { send(.screenOptions(fps: screenFPS, audio: audio)) }
+        if isConnected { send(.screenOptions(fps: screenFPS, audio: audio, bitrateCap: nil)) }
     }
 
     /// 11인치 아이패드는 2388, 12.9인치는 2732

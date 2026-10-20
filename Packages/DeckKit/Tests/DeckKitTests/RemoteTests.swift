@@ -54,3 +54,18 @@ import Testing
     let home = ScreenQuality.settings(route: .sameWiFi, deviceLongSide: 2388, savedFPS: 60, savedAudio: true, remoteOverride: (fps: 30, audio: false))
     #expect(home == ScreenSettings(maxSide: 2388, fps: 60, audio: true, bitrateCap: nil))
 }
+
+// MARK: - 비트레이트 상한 칸
+
+@Test func bitrateCapRoundTrips() throws {
+    let m = ClientMessage.startScreen(displayId: 1, maxSide: 1600, fps: 30, audio: false, bitrateCap: 4_000_000)
+    #expect(try ClientMessage.decode(m.encoded()) == m)
+    let o = ClientMessage.screenOptions(fps: 60, audio: true, bitrateCap: nil)
+    #expect(try ClientMessage.decode(o.encoded()) == o)
+    #expect(try !o.encoded().contains("bitrateCap"))
+}
+
+@Test func missingBitrateCapIsNil() throws {
+    let old = #"{"type":"startScreen","displayId":7,"maxSide":2388,"fps":60,"audio":true}"#
+    #expect(try ClientMessage.decode(old) == .startScreen(displayId: 7, maxSide: 2388, fps: 60, audio: true, bitrateCap: nil))
+}

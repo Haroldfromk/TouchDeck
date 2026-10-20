@@ -70,9 +70,10 @@ public enum ClientMessage: Equatable, Sendable {
     case listDisplays
     /// 이 모니터를 긴 변 maxSide 픽셀 안으로 줄여서 보내 달라. 영상은 바이너리 메시지로 온다
     /// fps는 30 또는 60, audio는 맥 소리도 받을지. 옛 기기는 둘 다 안 보낸다(30, 소리 없음)
-    case startScreen(displayId: UInt32, maxSide: Int, fps: Int, audio: Bool)
+    /// bitrateCap: 초당 비트 상한(원격일 때). 없으면 맥이 정한 대로
+    case startScreen(displayId: UInt32, maxSide: Int, fps: Int, audio: Bool, bitrateCap: Int?)
     /// 보는 중에 fps나 소리를 바꾼다
-    case screenOptions(fps: Int, audio: Bool)
+    case screenOptions(fps: Int, audio: Bool, bitrateCap: Int?)
     case stopScreen
     /// 영상이 깨졌거나 처음 붙었다. 다음 프레임을 키프레임으로 달라
     case requestKeyframe
@@ -116,7 +117,7 @@ public enum ServerMessage: Equatable, Sendable {
 private enum Key: String, CodingKey {
     case type, deviceId, deviceName, publicKey, proof, page, index, button, value
     case remaining, nonce, pages, items, ok, message, muted, available, keysAllowed, key, path, children
-    case displayId, maxSide, width, height, state, fps, audio, text
+    case displayId, maxSide, width, height, state, fps, audio, text, bitrateCap
     case proto = "protocol"
 }
 
@@ -149,10 +150,12 @@ extension ClientMessage: Codable {
         case "startScreen":
             self = .startScreen(displayId: try c.decode(UInt32.self, forKey: .displayId), maxSide: try c.decode(Int.self, forKey: .maxSide),
                                 fps: ScreenFPS.normalize(try c.decodeIfPresent(Int.self, forKey: .fps) ?? ScreenFPS.low),
-                                audio: try c.decodeIfPresent(Bool.self, forKey: .audio) ?? false)
+                                audio: try c.decodeIfPresent(Bool.self, forKey: .audio) ?? false,
+                                bitrateCap: try c.decodeIfPresent(Int.self, forKey: .bitrateCap))
         case "screenOptions":
             self = .screenOptions(fps: ScreenFPS.normalize(try c.decodeIfPresent(Int.self, forKey: .fps) ?? ScreenFPS.low),
-                                  audio: try c.decodeIfPresent(Bool.self, forKey: .audio) ?? false)
+                                  audio: try c.decodeIfPresent(Bool.self, forKey: .audio) ?? false,
+                                  bitrateCap: try c.decodeIfPresent(Int.self, forKey: .bitrateCap))
         case "stopScreen": self = .stopScreen
         case "requestKeyframe": self = .requestKeyframe
         // 터치 값(kind, x, y, dx, dy)은 type과 같은 단계에 펼쳐 둔다
@@ -209,16 +212,18 @@ extension ClientMessage: Codable {
             try c.encode(path, forKey: .path)
         case .listDisplays:
             try c.encode("listDisplays", forKey: .type)
-        case .startScreen(let displayId, let maxSide, let fps, let audio):
+        case .startScreen(let displayId, let maxSide, let fps, let audio, let bitrateCap):
             try c.encode("startScreen", forKey: .type)
             try c.encode(displayId, forKey: .displayId)
             try c.encode(maxSide, forKey: .maxSide)
             try c.encode(fps, forKey: .fps)
             try c.encode(audio, forKey: .audio)
-        case .screenOptions(let fps, let audio):
+            try c.encodeIfPresent(bitrateCap, forKey: .bitrateCap)
+        case .screenOptions(let fps, let audio, let bitrateCap):
             try c.encode("screenOptions", forKey: .type)
             try c.encode(fps, forKey: .fps)
             try c.encode(audio, forKey: .audio)
+            try c.encodeIfPresent(bitrateCap, forKey: .bitrateCap)
         case .stopScreen:
             try c.encode("stopScreen", forKey: .type)
         case .requestKeyframe:
