@@ -4,6 +4,9 @@ import Foundation
 /// 명령 문자열은 zsh `-c`의 인자 하나로 통째로 들어간다.
 public enum AlacrittyCommand {
     public static let appPath = "/Applications/Alacritty.app"
+    /// 로그인(-l)이면서 대화형(-i). 로그인 항목으로 켜진 맥 앱은 PATH가 /usr/bin:/bin 정도라
+    /// Homebrew 경로를 넣는 ~/.zprofile까지 읽어야 pngquant 같은 명령이 보인다. 별칭은 ~/.zshrc(-i)에서 온다
+    public static let shellFlags = "-lic"
 
     /// - command: nil이면 빈 새 창. 있으면 대화형 zsh(`~/.zshrc`를 읽어 별칭이 먹는다)로 실행하고,
     ///   끝나도 창이 닫히지 않게 `exec zsh`로 셸을 이어 둔다.
@@ -15,7 +18,7 @@ public enum AlacrittyCommand {
         var args = ["-na", appPath, "--args", "--working-directory", dir]
         if let command {
             let script = "eval \(singleQuoted(command))"
-            args += ["-e", "/bin/zsh", "-ic", keepOpen ? "\(script); exec zsh" : script]
+            args += ["-e", "/bin/zsh", shellFlags, keepOpen ? "\(script); exec zsh" : script]
         }
         return args
     }

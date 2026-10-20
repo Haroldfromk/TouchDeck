@@ -5,7 +5,13 @@ import Testing
 @Test func commandArgumentsKeepQuotesIntact() {
     let args = AlacrittyCommand.openArguments(command: #"git commit -m "a b""#, directory: "/tmp")
     #expect(args == ["-na", "/Applications/Alacritty.app", "--args", "--working-directory", "/tmp",
-                     "-e", "/bin/zsh", "-ic", #"eval 'git commit -m "a b"'; exec zsh"#])
+                     "-e", "/bin/zsh", "-lic", #"eval 'git commit -m "a b"'; exec zsh"#])
+}
+
+/// 로그인 항목으로 켜진 맥 앱은 PATH가 /usr/bin:/bin 정도라, Homebrew 경로를 넣는 ~/.zprofile까지 읽어야 한다(-l).
+/// 대화형(-i)이어야 ~/.zshrc의 별칭도 보인다.
+@Test func shellReadsLoginProfileAndZshrc() {
+    #expect(AlacrittyCommand.shellFlags == "-lic")
 }
 
 /// 명령 끝의 # 주석이나 안 닫힌 따옴표가 뒤의 exec zsh를 삼키면 명령이 끝나자마자 창이 닫힌다.

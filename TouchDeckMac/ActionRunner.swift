@@ -69,10 +69,10 @@ extension ActionRunner {
     static let live = ActionRunner(
         commandExists: { word in
             await Task.detached {
-                // 대화형 zsh(-i)라야 ~/.zshrc의 별칭이 보인다.
+                // 실행할 때와 같은 셸(-lic)로 찾아야 ~/.zshrc의 별칭과 ~/.zprofile의 Homebrew 경로가 보인다.
                 // ~/.zshrc가 느리거나 멈추면 3초 뒤 확인을 건너뛰고 그냥 실행한다.
                 do {
-                    guard let status = try runProcess("/bin/zsh", ["-ic", AlacrittyCommand.lookupScript(for: word)],
+                    guard let status = try runProcess("/bin/zsh", [AlacrittyCommand.shellFlags, AlacrittyCommand.lookupScript(for: word)],
                                                       timeout: .seconds(3)) else { return true }
                     return status == 0
                 } catch {
