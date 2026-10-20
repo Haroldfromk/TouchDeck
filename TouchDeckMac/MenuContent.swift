@@ -4,9 +4,11 @@ import SwiftUI
 /// 메뉴바 아이콘을 누르면 뜨는 작은 창. 편집 화면은 두지 않는다 (편집은 아이패드/아이폰에서).
 struct MenuContent: View {
     let server: DeckServer
+    let keepAwake: KeepAwakeController
     var loginItem = LoginItem.live
     @State private var launchAtLogin = false
     @State private var loginError: String?
+    @AppStorage(KeepAwake.key) private var keepAwakeOn = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -112,6 +114,13 @@ struct MenuContent: View {
                 if let note = loginError ?? (launchAtLogin ? loginItem.note : nil) {
                     Text(note).font(.caption).foregroundStyle(.secondary)
                 }
+            }
+            VStack(alignment: .leading, spacing: 4) {
+                Toggle("잠자기 막기", isOn: $keepAwakeOn)
+                    .onChange(of: keepAwakeOn) { keepAwake.refresh() }
+                Text(keepAwakeOn ? "잠자기 막는 중. 맥이 잠들지도 잠기지도 않아요"
+                     : "켜 두면 맥이 잠들지도 잠기지도 않아요. 밖에서 화면을 볼 때 켜 두세요")
+                    .font(.caption).foregroundStyle(.secondary)
             }
             Button("TouchDeck 종료") { NSApplication.shared.terminate(nil) }
         }

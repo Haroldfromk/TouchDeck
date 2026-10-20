@@ -66,6 +66,8 @@ final class ScreenStreamer: NSObject, SCStreamOutput, SCStreamDelegate, @uncheck
     private var config: SCStreamConfiguration?
     // 아래는 queue에서만 만진다
     private var fps: Int
+    /// 원격처럼 좁은 길이면 아이패드가 상한을 준다. nil이면 40Mbps까지
+    private var cap: Int?
     private var encoder: VTCompressionSession?
     private var forceKeyframe = true
     /// 화면이 멈춰 있으면 새 프레임이 안 온다. 키프레임을 달라고 하면 마지막 화면을 다시 압축한다
@@ -74,11 +76,12 @@ final class ScreenStreamer: NSObject, SCStreamOutput, SCStreamDelegate, @uncheck
     // audioQueue에서만 만진다
     private var warnedAudioFormat = false
 
-    init(width: Int, height: Int, fps: Int, onPacket: @escaping @Sendable (VideoPacket) -> Void,
+    init(width: Int, height: Int, fps: Int, cap: Int?, onPacket: @escaping @Sendable (VideoPacket) -> Void,
          onAudio: @escaping @Sendable (AudioPacket) -> Void, onStop: @escaping @Sendable () -> Void) {
         self.width = width
         self.height = height
         self.fps = fps
+        self.cap = cap
         self.onPacket = onPacket
         self.onAudio = onAudio
         self.onStop = onStop
@@ -87,7 +90,7 @@ final class ScreenStreamer: NSObject, SCStreamOutput, SCStreamDelegate, @uncheck
     enum StartError: Error { case noDisplay }
 
     /// 모니터를 찾아 크기를 정하고 찍기 시작한다. SCDisplay는 여러 스레드에 넘길 수 없어서 찾기부터 여기서 한다.
-    static func start(displayId: CGDirectDisplayID, maxSide: Int, fps: Int, onPacket: @escaping @Sendable (VideoPacket) -> Void,
+    static func start(displayId: CGDirectDisplayID, maxSide: Int, fps: Int, cap: Int?, onPacket: @escaping @Sendable (VideoPacket) -> Void,
                       onAudio: @escaping @Sendable (AudioPacket) -> Void,
                       onStop: @escaping @Sendable () -> Void) async throws -> ScreenStreamer {
         guard let display = try await DisplayCatalog.displays().first(where: { $0.displayID == displayId }) else {
@@ -97,7 +100,7 @@ final class ScreenStreamer: NSObject, SCStreamOutput, SCStreamDelegate, @uncheck
         let mode = CGDisplayCopyDisplayMode(displayId)
         let pixels = (width: mode?.pixelWidth ?? display.width, height: mode?.pixelHeight ?? display.height)
         let size = ScreenGeometry.fit(width: pixels.width, height: pixels.height, maxSide: maxSide)
-        let streamer = ScreenStreamer(width: size.width, height: size.height, fps: fps, onPacket: onPacket, onAudio: onAudio, onStop: onStop)
+        let streamer = ScreenStreamer(width: size.width, height: size.height, fps: fps, cap: cap, onPacket: onPacket, onAudio: onAudio, onStop: onStop)
         try await streamer.start(display: display)
         return streamer
     }
@@ -138,7 +141,17 @@ final class ScreenStreamer: NSObject, SCStreamOutput, SCStreamDelegate, @uncheck
             guard let encoder = self.encoder else { return }
             VTSessionSetProperty(encoder, key: kVTCompressionPropertyKey_ExpectedFrameRate, value: fps as CFNumber)
             VTSessionSetProperty(encoder, key: kVTCompressionPropertyKey_AverageBitRate,
-                                 value: Self.bitRate(width: self.width, height: self.height, fps: fps) as CFNumber)
+                                 value: Self.bitRate(width: self.width, height: self.height, fps: fps, cap: self.cap) as CFNumber)
+        }
+    }
+
+    /// 보는 중에 비트레이트 상한을 바꾼다
+    func setBitrateCap(_ cap: Int?) {
+        queue.async {
+            self.cap = cap
+            guard let encoder = self.encoder else { return }
+            VTSessionSetProperty(encoder, key: kVTCompressionPropertyKey_AverageBitRate,
+                                 value: Self.bitRate(width: self.width, height: self.height, fps: self.fps, cap: cap) as CFNumber)
         }
     }
 
@@ -194,14 +207,15 @@ final class ScreenStreamer: NSObject, SCStreamOutput, SCStreamDelegate, @uncheck
         VTSessionSetProperty(session, key: kVTCompressionPropertyKey_MaxKeyFrameIntervalDuration, value: 2 as CFNumber)
         VTSessionSetProperty(session, key: kVTCompressionPropertyKey_ExpectedFrameRate, value: fps as CFNumber)
         VTSessionSetProperty(session, key: kVTCompressionPropertyKey_AverageBitRate,
-                             value: Self.bitRate(width: width, height: height, fps: fps) as CFNumber)
+                             value: Self.bitRate(width: width, height: height, fps: fps, cap: cap) as CFNumber)
         VTCompressionSessionPrepareToEncodeFrames(session)
         encoder = session
     }
 
-    /// 글자가 많은 화면이라 넉넉하게(픽셀당 0.2비트 × 초당 장수). 와이파이가 버티게 40Mbps에서 멈춘다
-    static func bitRate(width: Int, height: Int, fps: Int) -> Int {
-        min(Int(Double(width * height) * Double(fps) * 0.2), 40_000_000)
+    /// 글자가 많은 화면이라 넉넉하게(픽셀당 0.2비트 × 초당 장수). 와이파이가 버티게 40Mbps에서 멈춘다.
+    /// 상한(cap)을 받으면 그보다도 넘지 않는다
+    static func bitRate(width: Int, height: Int, fps: Int, cap: Int?) -> Int {
+        min(Int(Double(width * height) * Double(fps) * 0.2), cap ?? 40_000_000)
     }
 
     private func encode(_ frame: CVPixelBuffer) {

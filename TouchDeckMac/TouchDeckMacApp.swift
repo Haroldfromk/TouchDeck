@@ -4,6 +4,7 @@ import SwiftUI
 @main
 struct TouchDeckMacApp: App {
     @State private var server: DeckServer
+    @State private var keepAwake: KeepAwakeController
 
     init() {
         // 터미널이 아닌 파일로 로그를 받을 때도 줄마다 바로 쓰이게
@@ -16,6 +17,7 @@ struct TouchDeckMacApp: App {
             MediaKey.requestPermissionIfNeeded()
         }
         _server = State(initialValue: server)
+        _keepAwake = State(initialValue: KeepAwakeController(screen: server.screen))
     }
 
     /// 디버그 빌드에서 끝까지 확인할 때만: 설정 파일 위치를 바꿔 실제 설정에 테스트 버튼이 남지 않게.
@@ -36,7 +38,7 @@ struct TouchDeckMacApp: App {
 
     var body: some Scene {
         MenuBarExtra {
-            MenuContent(server: server)
+            MenuContent(server: server, keepAwake: keepAwake)
         } label: {
             // 누가 맥 화면을 보고 있으면 메뉴바 아이콘이 눈으로 바뀐다
             Image(systemName: server.screen.viewerName != nil ? "eye.fill"

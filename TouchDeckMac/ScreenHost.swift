@@ -27,6 +27,7 @@ final class ScreenHost {
     @ObservationIgnored private var fps = ScreenFPS.low
     /// 보는 기기가 소리를 받겠다고 했는지
     @ObservationIgnored private var audioOn = false
+    @ObservationIgnored private var bitrateCap: Int?
     /// 소리 묶음은 작지만 와이파이가 막히면 쌓인다. 10개(약 0.1~0.2초)가 밀려 있으면 버린다
     @ObservationIgnored private var audioGate = SendGate(limit: 10)
     @ObservationIgnored private var terminateObserver: NSObjectProtocol?
@@ -54,7 +55,7 @@ final class ScreenHost {
         }
     }
 
-    func start(_ session: ClientSession, displayId: UInt32, maxSide: Int, fps: Int, audio: Bool, allowed: Bool) {
+    func start(_ session: ClientSession, displayId: UInt32, maxSide: Int, fps: Int, audio: Bool, bitrateCap: Int?, allowed: Bool) {
         guard check(session, allowed: allowed) else { return }
         stopStream()
         generation += 1
@@ -63,6 +64,7 @@ final class ScreenHost {
         viewerName = session.deviceName ?? "기기"
         warnedNoInput = false
         self.fps = fps
+        self.bitrateCap = bitrateCap
         audioOn = audio
         let onPacket: @Sendable (VideoPacket) -> Void = { [weak self] packet in
             Task { @MainActor in self?.deliver(packet, generation: current) }
@@ -80,7 +82,7 @@ final class ScreenHost {
         Task {
             let streamer: ScreenStreamer
             do {
-                streamer = try await ScreenStreamer.start(displayId: displayId, maxSide: maxSide, fps: fps,
+                streamer = try await ScreenStreamer.start(displayId: displayId, maxSide: maxSide, fps: fps, cap: bitrateCap,
                                                           onPacket: onPacket, onAudio: onAudio, onStop: onStop)
             } catch {
                 print("[screen] start failed:", error)
@@ -95,6 +97,7 @@ final class ScreenHost {
             self.display = CGDisplayBounds(displayId)
             // 시작하는 사이에 fps를 바꿨으면 따라간다
             if self.fps != fps { streamer.setFrameRate(self.fps) }
+            if self.bitrateCap != bitrateCap { streamer.setBitrateCap(self.bitrateCap) }
             gate = SendGate(limit: SendGate.limit(forFPS: self.fps))
             audioGate = SendGate(limit: 10)
             print("[screen] start", viewerName ?? "?", displayId, streamer.width, streamer.height, "\(self.fps)fps", audioOn ? "audio" : "")
@@ -105,8 +108,12 @@ final class ScreenHost {
     }
 
     /// 보는 중에 30/60이나 소리를 바꾼다. 보고 있는 기기만
-    func options(_ session: ClientSession, fps: Int, audio: Bool) {
+    func options(_ session: ClientSession, fps: Int, audio: Bool, bitrateCap: Int?) {
         guard session === viewer else { return }
+        if bitrateCap != self.bitrateCap {
+            self.bitrateCap = bitrateCap
+            streamer?.setBitrateCap(bitrateCap)
+        }
         if fps != self.fps {
             self.fps = fps
             streamer?.setFrameRate(fps)

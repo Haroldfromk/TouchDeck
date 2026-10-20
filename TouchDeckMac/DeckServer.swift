@@ -328,8 +328,8 @@ final class DeckServer {
         case .listDisplays:
             screen.listDisplays(for: session, allowed: screenAllowed(session))
 
-        case .startScreen(let displayId, let maxSide, let fps, let audio, _):
-            screen.start(session, displayId: displayId, maxSide: maxSide, fps: fps, audio: audio, allowed: screenAllowed(session))
+        case .startScreen(let displayId, let maxSide, let fps, let audio, let bitrateCap):
+            screen.start(session, displayId: displayId, maxSide: maxSide, fps: fps, audio: audio, bitrateCap: bitrateCap, allowed: screenAllowed(session))
 
         case .stopScreen:
             screen.stop(session)
@@ -340,8 +340,8 @@ final class DeckServer {
         case .pointer(let event):
             screen.pointer(event, from: session)
 
-        case .screenOptions(let fps, let audio, _):
-            screen.options(session, fps: fps, audio: audio)
+        case .screenOptions(let fps, let audio, let bitrateCap):
+            screen.options(session, fps: fps, audio: audio, bitrateCap: bitrateCap)
 
         case .typeText(let text):
             screen.typeText(text, from: session)

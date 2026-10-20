@@ -71,10 +71,16 @@ private let t0 = Date(timeIntervalSince1970: 1000)
 
 @Test func bitRateScalesWithFps() {
     // 11인치 아이패드 해상도: 30fps는 약 24Mbps, 60fps는 상한 40Mbps
-    #expect(ScreenStreamer.bitRate(width: 2388, height: 1668, fps: 30) == 23_899_104)
-    #expect(ScreenStreamer.bitRate(width: 2388, height: 1668, fps: 60) == 40_000_000)
+    #expect(ScreenStreamer.bitRate(width: 2388, height: 1668, fps: 30, cap: nil) == 23_899_104)
+    #expect(ScreenStreamer.bitRate(width: 2388, height: 1668, fps: 60, cap: nil) == 40_000_000)
 }
 
 @Test func bitRateIsCapped() {
-    #expect(ScreenStreamer.bitRate(width: 3840, height: 2160, fps: 30) == 40_000_000)
+    #expect(ScreenStreamer.bitRate(width: 3840, height: 2160, fps: 30, cap: nil) == 40_000_000)
+}
+
+@Test func bitRateHonorsCap() {
+    #expect(ScreenStreamer.bitRate(width: 1600, height: 1000, fps: 30, cap: 4_000_000) == 4_000_000)
+    #expect(ScreenStreamer.bitRate(width: 1600, height: 1000, fps: 30, cap: nil) == 9_600_000)
+    #expect(ScreenStreamer.bitRate(width: 640, height: 400, fps: 30, cap: 4_000_000) == 1_536_000)
 }
