@@ -242,7 +242,7 @@ final class DeckClient {
     /// 원격 중에 바꾼 값은 그 연결 동안만 쓰고, 집에서 고른 값은 그대로 둔다
     func setScreenOptions(fps: Int, audio: Bool) {
         let fps = ScreenFPS.normalize(fps)
-        if screenRoute == .vpn {
+        if shownRoute == .vpn {
             remoteOverride = (fps, audio)
         } else {
             savedFPS = fps
@@ -255,11 +255,12 @@ final class DeckClient {
         if isConnected { send(.screenOptions(fps: settings.fps, audio: settings.audio, bitrateCap: settings.bitrateCap)) }
     }
 
-    /// 원격 주소로 붙었으면 길 표시가 무엇이든 원격으로 친다
-    private var screenRoute: ConnectionRoute? { isRemote ? .vpn : route }
+    /// 상태 줄과 화질이 쓰는 길. 원격 주소로 붙었으면 장치 이름이 무엇이든 원격으로 친다
+    /// (아이폰 LTE에서는 Tailscale 연결이 utun이 아닌 장치로 잡혀 "기타 연결"로 보였다)
+    var shownRoute: ConnectionRoute? { isRemote ? .vpn : route }
 
     private var screenSettings: ScreenSettings {
-        ScreenQuality.settings(route: screenRoute, deviceLongSide: screenPixelLongSide, savedFPS: savedFPS,
+        ScreenQuality.settings(route: shownRoute, deviceLongSide: screenPixelLongSide, savedFPS: savedFPS,
                                savedAudio: savedAudio, remoteOverride: remoteOverride)
     }
 
@@ -398,6 +399,7 @@ final class DeckClient {
             MainActor.assumeIsolated {
                 guard let self, let channel, channel === self.channel else { return }
                 self.route = ConnectionRoute(path: path)
+                print("[client] path", path.availableInterfaces.map { "\($0.name)(\($0.type))" }, self.route.map(\.label) ?? "-")
             }
         }
         self.channel = channel

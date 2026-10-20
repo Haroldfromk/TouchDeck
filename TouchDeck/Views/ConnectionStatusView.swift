@@ -6,6 +6,8 @@ struct ConnectionStatusView: View {
     let phase: DeckClient.Phase
     var route: ConnectionRoute?
     var remoteFailed = false
+    /// 밖에서 붙을 맥 주소를 넣는 시트를 연다
+    var onRemote: (() -> Void)?
 
     var body: some View {
         HStack(spacing: 10) {
@@ -28,6 +30,12 @@ struct ConnectionStatusView: View {
             if case .localNetworkDenied = phase {
                 Button("설정 열기") {
                     if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
+                }
+                .font(.subheadline.weight(.semibold))
+            }
+            if let onRemote {
+                Button(action: onRemote) {
+                    Label("밖에서 붙기", systemImage: "globe")
                 }
                 .font(.subheadline.weight(.semibold))
             }

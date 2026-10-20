@@ -33,11 +33,9 @@ struct DeckView: View {
             VStack(spacing: 14) {
                 HStack(spacing: 16) {
                     VStack(alignment: .leading, spacing: 4) {
-                        // 상태 줄을 누르면 밖에서 붙을 맥 주소를 넣는다
-                        // 버튼으로 감싸지 않는다. 안에 "설정 열기" 버튼이 있어 그 버튼이 먼저 눌려야 한다
-                        ConnectionStatusView(phase: client.phase, route: client.route, remoteFailed: client.remoteFailed)
-                            .contentShape(.rect)
-                            .onTapGesture { showRemote = true }
+                        // 오른쪽 "밖에서 붙기" 버튼으로 밖에서 붙을 맥 주소를 넣는다
+                        ConnectionStatusView(phase: client.phase, route: client.shownRoute, remoteFailed: client.remoteFailed,
+                                             onRemote: { showRemote = true })
                         if client.macNeedsUpdate {
                             Label("맥 TouchDeck을 새 버전으로 설치해 주세요", systemImage: "arrow.down.circle")
                                 .font(.caption.weight(.medium))
@@ -52,7 +50,7 @@ struct DeckView: View {
                     .disabled(!client.isConnected)
                 }
                 // 맥 화면 탭은 모니터 카드를 넓게 쓰려고 볼륨 칸을 숨긴다
-                // 상태 줄은 끊겨 있을 때도 눌려야 해서(원격 주소 넣기) 아래쪽만 막는다
+                // 상태 줄의 "밖에서 붙기"는 끊겨 있을 때도 눌려야 해서 아래쪽만 막는다
                 Group {
                     if screen == .screen {
                         main(columns: DeckConstants.columns)
