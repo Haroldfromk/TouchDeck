@@ -47,6 +47,7 @@ final class KeepAwakeController {
 
     init(screen: ScreenHost) {
         self.screen = screen
+        watchViewer()
         refresh()
         NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.power.apply([]) }
@@ -54,9 +55,16 @@ final class KeepAwakeController {
     }
 
     func refresh() {
-        let viewing = withObservationTracking { screen.viewerName != nil } onChange: { [weak self] in
-            Task { @MainActor in self?.refresh() }
+        power.apply(KeepAwake.wanted(enabled: UserDefaults.standard.bool(forKey: KeepAwake.key), viewing: screen.viewerName != nil))
+    }
+
+    /// 지켜보기는 한 번 바뀌면 끝나서, 바뀔 때마다 다시 건다. 체크로 부르는 refresh와 나눠 두어야 지켜보기가 쌓이지 않는다
+    private func watchViewer() {
+        withObservationTracking { _ = screen.viewerName } onChange: { [weak self] in
+            Task { @MainActor in
+                self?.refresh()
+                self?.watchViewer()
+            }
         }
-        power.apply(KeepAwake.wanted(enabled: UserDefaults.standard.bool(forKey: KeepAwake.key), viewing: viewing))
     }
 }

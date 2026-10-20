@@ -366,6 +366,14 @@ final class DeckClient {
         guard case .useRemote(let host) = step, let url = RemoteAddress.url(host: host) else { return }
         macName = host
         connect(to: .url(url), remote: true)
+        // 맥이 잠들어 있으면 Tailscale 안에서 답 없이 오래 기다린다. 10초 안에 허락까지 못 가면 실패로 친다
+        let attempt = channel
+        Task {
+            try? await Task.sleep(for: .seconds(10))
+            guard let attempt, attempt === channel, !isConnected, !isHomePairingNeeded else { return }
+            remoteFailed = true
+            reconnectLater()
+        }
     }
 
     private func connect(to endpoint: NWEndpoint, remote: Bool = false) {
