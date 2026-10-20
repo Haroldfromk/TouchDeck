@@ -162,12 +162,12 @@ TOUCHDECK_DEBUG_PAIR_CODE=4821 TOUCHDECK_DEBUG_CONFIG=/tmp/touchdeck-e2e.json ./
 
 클로드 코드와 바이브 코딩으로 진행한 과정을 블로그에 정리했다. 만난 오류와 고친 과정, 참고한 애플 문서를 같이 적었다.
 
-1. [아이패드와 맥이 같은 와이파이에서 서로를 찾아 붙기까지](https://haroldfromk.github.io/posts/StreamDeck-(1)/){:target="_blank"}
-2. [맥에 설치된 앱 목록과 아이콘을 보내고, 눌러서 실행하기](https://haroldfromk.github.io/posts/StreamDeck-(2)/){:target="_blank"}
-3. [버튼 하나로 Alacritty 새 창에서 별칭 명령 실행하기, 그리고 볼륨 키](https://haroldfromk.github.io/posts/StreamDeck-(3)/){:target="_blank"}
-4. [키캡처럼 눌리는 버튼, 길게 눌러 편집하기, 옆으로 넘기는 페이지](https://haroldfromk.github.io/posts/StreamDeck-(4)/){:target="_blank"}
-5. [아무나 내 맥을 못 건드리게 하는 4자리 숫자, 키 교환, 메시지마다 붙이는 서명](https://haroldfromk.github.io/posts/StreamDeck-(5)/){:target="_blank"}
-6. [무각 키보드 대신 쓰는 아이패드 숫자 키패드, 그리고 메시지 암호화](https://haroldfromk.github.io/posts/StreamDeck-(6)/){:target="_blank"}
-7. [아이패드로 맥 화면을 보고 터치로 조작하기](https://haroldfromk.github.io/posts/StreamDeck-(7)/){:target="_blank"}
-8. [60fps와 소리, 그리고 맥에 글자 보내기](https://haroldfromk.github.io/posts/StreamDeck-(8)/){:target="_blank"}
-9. [밖에서 맥에 붙기, Tailscale과 잠자기 막기](https://haroldfromk.github.io/posts/StreamDeck-(9)/){:target="_blank"}
+1. [아이패드와 맥이 같은 와이파이에서 서로를 찾아 붙기까지](https://haroldfromk.github.io/posts/StreamDeck-(1)/)
+2. [맥에 설치된 앱 목록과 아이콘을 보내고, 눌러서 실행하기](https://haroldfromk.github.io/posts/StreamDeck-(2)/)
+3. [버튼 하나로 Alacritty 새 창에서 별칭 명령 실행하기, 그리고 볼륨 키](https://haroldfromk.github.io/posts/StreamDeck-(3)/)
+4. [키캡처럼 눌리는 버튼, 길게 눌러 편집하기, 옆으로 넘기는 페이지](https://haroldfromk.github.io/posts/StreamDeck-(4)/)
+5. [아무나 내 맥을 못 건드리게 하는 4자리 숫자, 키 교환, 메시지마다 붙이는 서명](https://haroldfromk.github.io/posts/StreamDeck-(5)/)
+6. [무각 키보드 대신 쓰는 아이패드 숫자 키패드, 그리고 메시지 암호화](https://haroldfromk.github.io/posts/StreamDeck-(6)/)
+7. [아이패드로 맥 화면을 보고 터치로 조작하기](https://haroldfromk.github.io/posts/StreamDeck-(7)/)
+8. [60fps와 소리, 그리고 맥에 글자 보내기](https://haroldfromk.github.io/posts/StreamDeck-(8)/)
+9. [밖에서 맥에 붙기, Tailscale과 잠자기 막기](https://haroldfromk.github.io/posts/StreamDeck-(9)/)
