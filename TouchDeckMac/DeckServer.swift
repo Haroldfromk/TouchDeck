@@ -467,7 +467,8 @@ final class DeckServer {
             // 근처 주소(fe80::…%en8)에는 실제로 탄 장치가 붙어 있다
             if case .ipv6(let address) = host { link = address.interface?.name }
         }
-        let route = ConnectionRoute(macSideRemote: remote, link: link)
+        let route = ConnectionRoute(macSideRemote: remote, link: link,
+                                    linkIsLocalOnly: link.map(NetworkLinks.hasOnlyLocalAddresses) ?? false)
         print("[server] route", session.deviceName ?? "?", link ?? "-", route.rawValue)
         session.send(.route(route))
     }

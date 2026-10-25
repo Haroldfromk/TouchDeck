@@ -31,11 +31,15 @@ public enum ConnectionRoute: String, Codable, Equatable, Sendable {
     /// link는 상대 주소에 붙은 장치 이름(fe80::…%awdl0의 awdl0)이다. 연결이 "쓸 수 있는 장치 목록"은
     /// 실제로 쓰는 장치와 달라서(랜으로 온 연결도 awdl0이 첫째로 나왔다) 쓰지 않는다.
     /// 맥이 랜선으로 붙어 있어도 와이파이로 붙은 기기에게는 같은 네트워크라, 와이파이인지 유선인지는 기기가 정한다
-    public init(macSideRemote remote: NWEndpoint.Host?, link: String?) {
+    /// linkIsLocalOnly: 그 장치에 집 네트워크 주소 없이 169.254, fe80 같은 근처 전용 주소만 있다.
+    /// 아이폰을 케이블로 꽂으면 맥에 이런 장치(en7 등)가 생긴다
+    public init(macSideRemote remote: NWEndpoint.Host?, link: String?, linkIsLocalOnly: Bool) {
         if let remote, UnlockPolicy.isTailscale(remote) {
             self = .vpn
         } else if let link, link.hasPrefix("awdl") || link.hasPrefix("llw") {
             self = .direct
+        } else if link != nil, linkIsLocalOnly {
+            self = .wired
         } else {
             self = .sameWiFi
         }

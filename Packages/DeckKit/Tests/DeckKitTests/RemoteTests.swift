@@ -77,16 +77,24 @@ import Testing
 /// 맥은 연결이 들어온 장치와 상대 주소를 정확히 알아서, 맥이 정한 길을 이름표로 쓴다
 @Test func macRouteUsesTailscaleAddressFirst() throws {
     // Tailscale 주소면 어느 장치로 들어왔든 원격
-    #expect(ConnectionRoute(macSideRemote: try #require(NWEndpoint.Host("100.64.0.1")), link: nil) == .vpn)
-    #expect(ConnectionRoute(macSideRemote: try #require(NWEndpoint.Host("fd7a:115c:a1e0::1")), link: "utun10") == .vpn)
+    #expect(ConnectionRoute(macSideRemote: try #require(NWEndpoint.Host("100.64.0.1")), link: nil, linkIsLocalOnly: false) == .vpn)
+    #expect(ConnectionRoute(macSideRemote: try #require(NWEndpoint.Host("fd7a:115c:a1e0::1")), link: "utun10", linkIsLocalOnly: false) == .vpn)
     // 상대 주소가 직접 연결 장치에 붙어 있으면 직접 연결
-    #expect(ConnectionRoute(macSideRemote: try #require(NWEndpoint.Host("fe80::1")), link: "awdl0") == .direct)
-    #expect(ConnectionRoute(macSideRemote: try #require(NWEndpoint.Host("fe80::1")), link: "llw0") == .direct)
+    #expect(ConnectionRoute(macSideRemote: try #require(NWEndpoint.Host("fe80::1")), link: "awdl0", linkIsLocalOnly: true) == .direct)
+    #expect(ConnectionRoute(macSideRemote: try #require(NWEndpoint.Host("fe80::1")), link: "llw0", linkIsLocalOnly: true) == .direct)
     // 맥이 랜선(en8)이든 와이파이(en0)든 같은 네트워크. 와이파이인지 유선인지는 기기가 정한다
-    #expect(ConnectionRoute(macSideRemote: try #require(NWEndpoint.Host("fe80::1")), link: "en8") == .sameWiFi)
-    #expect(ConnectionRoute(macSideRemote: try #require(NWEndpoint.Host("192.168.0.20")), link: nil) == .sameWiFi)
+    #expect(ConnectionRoute(macSideRemote: try #require(NWEndpoint.Host("fe80::1")), link: "en8", linkIsLocalOnly: false) == .sameWiFi)
+    #expect(ConnectionRoute(macSideRemote: try #require(NWEndpoint.Host("192.168.0.20")), link: nil, linkIsLocalOnly: false) == .sameWiFi)
     // Xcode가 케이블로 여는 통로(utun)도 Tailscale 주소가 아니면 같은 네트워크
-    #expect(ConnectionRoute(macSideRemote: try #require(NWEndpoint.Host("fd08:d1fb:d78c::1")), link: "utun12") == .sameWiFi)
+    #expect(ConnectionRoute(macSideRemote: try #require(NWEndpoint.Host("fd08:d1fb:d78c::1")), link: "utun12", linkIsLocalOnly: false) == .sameWiFi)
+}
+
+/// 아이폰을 케이블로 꽂으면 맥에 en7 같은 장치가 생기고, 거기엔 169.254와 fe80 같은 근처 전용 주소만 있다.
+/// 집 네트워크 주소가 없는 장치로 들어온 연결은 케이블로 바로 붙은 것이다
+@Test func cableLinkIsWired() throws {
+    #expect(ConnectionRoute(macSideRemote: try #require(NWEndpoint.Host("fe80::1")), link: "en7", linkIsLocalOnly: true) == .wired)
+    // 직접 연결(awdl)도 근처 전용 주소만 있지만 무선이다
+    #expect(ConnectionRoute(macSideRemote: try #require(NWEndpoint.Host("fe80::1")), link: "awdl0", linkIsLocalOnly: true) == .direct)
 }
 
 /// 맥이 같은 네트워크라고 하면 기기 쪽의 와이파이/유선 판단을 쓴다. 직접 연결과 원격은 맥 판단이 이긴다
