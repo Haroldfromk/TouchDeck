@@ -79,3 +79,29 @@ import Testing
     #expect(throws: (any Error).self) { try ClientMessage.decode(#"{"key":"a","type":"typeKey"}"#) }
     #expect(throws: (any Error).self) { try ClientMessage.decode(#"{"key":"10","type":"typeKey"}"#) }
 }
+
+/// 키패드 기호 화면: HHKB 오른쪽 위 묶음(- = \ ` / _ + | ~)과 마크다운에 쓰는 괄호, 따옴표
+@Test func symbolKeysAreTheSixteenInLayoutOrder() {
+    #expect(TypedKey.symbols.map { String($0) }.joined() == #"-=\`_+|~[]{};':""#)
+    #expect(TypedKey.symbols.count == 16)
+}
+
+@Test func symbolKeysRoundTrip() throws {
+    for symbol in TypedKey.symbols {
+        let message = ClientMessage.typeKey(.symbol(symbol))
+        #expect(try ClientMessage.decode(message.encoded()) == message)
+    }
+    #expect(try ClientMessage.typeKey(.symbol("\\")).encoded() == #"{"key":"\\","type":"typeKey"}"#)
+}
+
+/// 목록에 없는 글자는 받지 않는다 (글자 입력은 화면 보기의 typeText로만)
+@Test func unknownSymbolIsRejected() {
+    #expect(throws: (any Error).self) { try ClientMessage.decode(#"{"key":"a","type":"typeKey"}"#) }
+    #expect(throws: (any Error).self) { try ClientMessage.decode(#"{"key":"가","type":"typeKey"}"#) }
+}
+
+@Test func symbolKeysNeedProtocolThree() {
+    #expect(DeckProtocol.textInput == 2)
+    #expect(DeckProtocol.symbolKeys == 3)
+    #expect(DeckProtocol.current == DeckProtocol.symbolKeys)
+}

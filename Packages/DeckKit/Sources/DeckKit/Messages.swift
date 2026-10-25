@@ -24,6 +24,11 @@ public enum VolumeKey: String, Codable, Sendable {
 public enum TypedKey: Equatable, Hashable, Sendable, Codable {
     case digit(Int)
     case tab, delete, enter
+    /// 기호 화면의 키. symbols에 있는 글자만
+    case symbol(Character)
+
+    /// 기호 화면에 놓는 순서(4열). HHKB 오른쪽 위 묶음과 그 Shift, 마크다운에 쓰는 괄호와 따옴표
+    public static let symbols: [Character] = Array(#"-=\`_+|~[]{};':""#)
 
     public init(from decoder: Decoder) throws {
         let text = try decoder.singleValueContainer().decode(String.self)
@@ -32,10 +37,16 @@ public enum TypedKey: Equatable, Hashable, Sendable, Codable {
         case "delete": self = .delete
         case "enter": self = .enter
         default:
-            guard text.count == 1, let digit = Int(text) else {
+            guard text.count == 1, let character = text.first else {
                 throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath, debugDescription: "unknown key \(text)"))
             }
-            self = .digit(digit)
+            if let digit = Int(text) {
+                self = .digit(digit)
+            } else if Self.symbols.contains(character) {
+                self = .symbol(character)
+            } else {
+                throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath, debugDescription: "unknown key \(text)"))
+            }
         }
     }
 
@@ -46,6 +57,7 @@ public enum TypedKey: Equatable, Hashable, Sendable, Codable {
         case .tab: try c.encode("tab")
         case .delete: try c.encode("delete")
         case .enter: try c.encode("enter")
+        case .symbol(let s): try c.encode(String(s))
         }
     }
 }

@@ -21,3 +21,11 @@ import Testing
 @Test func outOfRangeDigitHasNoKey() {
     #expect(KeyTyper.keyCode(for: .digit(12)) == nil)
 }
+
+/// 기호는 키 번호가 아니라 글자 그대로 넣는다. 한글 입력 상태에서 `가 ₩로 바뀌거나 Shift가 섞이지 않게
+@Test func symbolsAreTypedAsCharacters() {
+    #expect(KeyTyper.keyCode(for: .symbol("~")) == nil)
+    #expect(KeyTyper.characters(for: .symbol("~")) == Array("~".utf16))
+    #expect(KeyTyper.characters(for: .symbol("`")) == Array("`".utf16))
+    #expect(KeyTyper.characters(for: .digit(1)) == nil)
+}

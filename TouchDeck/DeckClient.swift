@@ -197,7 +197,9 @@ final class DeckClient {
     func typeKey(_ key: TypedKey) { send(.typeKey(key)) }
 
     /// 맥 앱이 글자 입력을 아는 버전인지 (기능 번호 2부터)
-    var canTypeRemotely: Bool { (macProtocol ?? DeckProtocol.legacy) >= DeckProtocol.current }
+    var canTypeRemotely: Bool { (macProtocol ?? DeckProtocol.legacy) >= DeckProtocol.textInput }
+    /// 맥 앱이 키패드 기호를 아는 버전인지 (기능 번호 3부터)
+    var canTypeSymbols: Bool { (macProtocol ?? DeckProtocol.legacy) >= DeckProtocol.symbolKeys }
     /// 맥 앱이 이 기기 앱보다 예전 버전이다
     var macNeedsUpdate: Bool { macProtocol.map { $0 < DeckProtocol.current } ?? false }
 
