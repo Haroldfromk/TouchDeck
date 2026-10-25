@@ -64,7 +64,7 @@ final class RemoteTyper: @unchecked Sendable {
     }
 
     /// 글자는 키 번호가 아니라 글자 그대로 싣는다. 그래서 맥 입력 상태가 한글이어도 쓴 글자가 들어간다
-    private static func postEvent(_ step: RemoteStep) {
+    static func postEvent(_ step: RemoteStep) {
         let source = CGEventSource(stateID: .hidSystemState)
         for down in [true, false] {
             switch step {

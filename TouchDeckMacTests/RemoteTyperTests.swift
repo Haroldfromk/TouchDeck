@@ -27,7 +27,7 @@ import Testing
 }
 
 /// 여러 스레드에서 쌓아도 되는 기록
-private final class StepLog: @unchecked Sendable {
+final class StepLog: @unchecked Sendable {
     private let lock = NSLock()
     private var items: [RemoteStep] = []
 

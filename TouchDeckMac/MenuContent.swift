@@ -97,8 +97,22 @@ struct MenuContent: View {
                                 set: { server.setScreenAllowed($0, deviceId: device.id) }
                             ))
                             .controlSize(.small)
+                            Toggle("잠금 풀기 허용", isOn: Binding(
+                                get: { device.unlockAllowed },
+                                set: { server.setUnlockAllowed($0, deviceId: device.id) }
+                            ))
+                            .controlSize(.small)
+                            if device.unlockAllowed {
+                                Text("켜 두면 이 기기의 Face ID로 맥 잠금을 풀 수 있어요. 같은 와이파이나 가까이 있을 때만 돼요.")
+                                    .font(.caption).foregroundStyle(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
                         }
                     }
+                }
+                if let last = server.lastUnlock {
+                    Text("마지막 잠금 풀기: \(last.device), \(last.at.formatted(date: .omitted, time: .shortened))")
+                        .font(.caption).foregroundStyle(.secondary)
                 }
             }
 

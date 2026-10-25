@@ -29,6 +29,8 @@ final class DeckServer {
     private(set) var isPairingLocked = false
     private(set) var connectedDevices: [String] = []
     private(set) var trusted: [TrustedDevice] = []
+    /// 맥 메뉴에 보이는 마지막 잠금 풀기
+    private(set) var lastUnlock: (device: String, at: Date)?
     let screen = ScreenHost()
 
     private let store: ConfigStore
@@ -39,6 +41,11 @@ final class DeckServer {
     private var sessions: [ClientSession] = []
     private var lastVolume: (value: Int, muted: Bool, available: Bool, keysAllowed: Bool)?
     private var volumeWatch: Task<Void, Never>?
+    /// 기기별 찍어 보기 막기
+    private var unlockLimiters: [String: UnlockLimiter] = [:]
+    /// 비밀번호를 치는 중. 겹쳐 오면 두 번 치지 않는다
+    private var unlocking = false
+    private var lockObservers: [NSObjectProtocol] = []
 
     init(store: ConfigStore = ConfigStore(), random: (@Sendable () -> UInt32)? = nil, actions: DeckActions) {
         self.store = store
@@ -63,6 +70,7 @@ final class DeckServer {
             listener.start(queue: .main)
             self.listener = listener
             watchVolume()
+            watchLock()
         } catch {
             status = "시작 실패: \(error)"
             print("[server] start failed:", error)
@@ -83,6 +91,13 @@ final class DeckServer {
         authority.setScreenAllowed(allowed, deviceId: deviceId)
         saveTrusted()
         if !allowed { screen.deviceDisallowed(deviceId) }
+    }
+
+    /// 맥 메뉴의 기기별 "잠금 풀기 허용". 바꾸면 그 기기의 버튼도 바로 따라간다
+    func setUnlockAllowed(_ allowed: Bool, deviceId: String) {
+        authority.setUnlockAllowed(allowed, deviceId: deviceId)
+        saveTrusted()
+        for session in sessions where session.deviceId == deviceId { sendLockState(to: session) }
     }
 
     func revoke(deviceId: String) {
@@ -183,7 +198,8 @@ final class DeckServer {
             print("[server] bad message:", text.prefix(200))
             return
         }
-        print("[server] <-", session.deviceName ?? "?", text.prefix(200))
+        // 허락 전에 평문으로 온 잠금 풀기 비밀번호 같은 것도 로그에 남기지 않는다
+        if !Self.isQuiet(message) { print("[server] <-", session.deviceName ?? "?", text.prefix(200)) }
 
         switch (session.stage, message) {
         case (_, .hello(let deviceId, let deviceName, let clientNonce, let protocolVersion)):
@@ -265,6 +281,7 @@ final class DeckServer {
         session.stage = .authorized
         session.send(.authorized(protocolVersion: DeckProtocol.current))
         session.send(.layout(config.layout))
+        sendLockState(to: session)
         refreshDevices()
         Task {
             let volume = await actions.volume()
@@ -349,8 +366,8 @@ final class DeckServer {
         case .pressKey(let key):
             screen.pressKey(key, from: session)
 
-        case .unlock:
-            break
+        case .unlock(let password):
+            unlock(password, from: session)
 
         case .hello, .pair, .auth:
             break
@@ -361,10 +378,10 @@ final class DeckServer {
         session.deviceId.map { authority.isScreenAllowed(deviceId: $0) } ?? false
     }
 
-    private static func isQuiet(_ message: ClientMessage) -> Bool {
+    static func isQuiet(_ message: ClientMessage) -> Bool {
         switch message {
-        // 입력칸 글과 특수 키도 비밀번호일 수 있어서 남기지 않는다
-        case .typeKey, .pointer, .requestKeyframe, .typeText, .pressKey: true
+        // 입력칸 글과 특수 키도 비밀번호일 수 있어서 남기지 않는다. 잠금 풀기는 맥 비밀번호 그 자체다
+        case .typeKey, .pointer, .requestKeyframe, .typeText, .pressKey, .unlock: true
         default: false
         }
     }
@@ -398,6 +415,70 @@ final class DeckServer {
             print("[server] edit failed:", error)
         }
         broadcast(.layout(config.layout))
+    }
+
+    // MARK: - 맥 잠금 풀기
+
+    /// 잠김과 풀림을 macOS 알림으로 받아 기기들에 알린다
+    private func watchLock() {
+        let center = DistributedNotificationCenter.default()
+        for name in ["com.apple.screenIsLocked", "com.apple.screenIsUnlocked"] {
+            lockObservers.append(center.addObserver(forName: .init(name), object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    guard let self else { return }
+                    for session in self.sessions { self.sendLockState(to: session) }
+                }
+            })
+        }
+    }
+
+    /// 허락받았고 잠금 풀기를 아는 버전의 기기에만. unlockAllowed는 "허용 켜짐 + 가까운 연결"
+    private func sendLockState(to session: ClientSession) {
+        guard session.stage == .authorized, session.protocolVersion >= DeckProtocol.unlock else { return }
+        let allowed = session.deviceId.map { authority.isUnlockAllowed(deviceId: $0) } ?? false
+        session.send(.lockState(locked: ScreenLock.isLocked, unlockAllowed: allowed && isNearby(session)))
+    }
+
+    /// 연결 상대 주소가 Tailscale이 아닌지. 주소를 알 수 없으면 가깝지 않은 것으로 본다
+    private func isNearby(_ session: ClientSession) -> Bool {
+        guard case .hostPort(let host, _) = session.channel.connection.endpoint else { return false }
+        return UnlockPolicy.isNearby(host)
+    }
+
+    private func unlock(_ password: String, from session: ClientSession) {
+        guard let deviceId = session.deviceId else { return }
+        let refusal = UnlockPolicy.check(allowed: authority.isUnlockAllowed(deviceId: deviceId),
+                                         nearby: isNearby(session),
+                                         limiterAllows: unlockLimiters[deviceId, default: UnlockLimiter()].allows(now: .now),
+                                         locked: ScreenLock.isLocked)
+        if let refusal {
+            print("[unlock] refused:", refusal.rawValue)
+            return session.send(.unlockResult(refusal))
+        }
+        guard !unlocking else { return print("[unlock] already typing") }
+        unlocking = true
+        let name = session.deviceName ?? "기기"
+        MacUnlocker.shared.type(password) { [weak self, weak session] typed in
+            Task { @MainActor in
+                guard let self else { return }
+                defer { self.unlocking = false }
+                guard typed else {
+                    session?.send(.unlockResult(.notLocked))
+                    return
+                }
+                // 잠금 화면이 비밀번호를 확인하고 풀리기까지 기다린다
+                try? await Task.sleep(for: .seconds(2))
+                if ScreenLock.isLocked {
+                    self.unlockLimiters[deviceId, default: UnlockLimiter()].recordFailure(now: .now)
+                    session?.send(.unlockResult(.wrongPassword))
+                } else {
+                    self.unlockLimiters[deviceId, default: UnlockLimiter()].recordSuccess()
+                    self.lastUnlock = (name, .now)
+                    print("[unlock] unlocked by", name)
+                    session?.send(.unlockResult(.unlocked))
+                }
+            }
+        }
     }
 
     private func broadcast(_ message: ServerMessage) {
