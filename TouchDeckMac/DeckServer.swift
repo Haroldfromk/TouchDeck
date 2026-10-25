@@ -436,7 +436,7 @@ final class DeckServer {
     private func sendLockState(to session: ClientSession) {
         guard session.stage == .authorized, session.protocolVersion >= DeckProtocol.unlock else { return }
         let allowed = session.deviceId.map { authority.isUnlockAllowed(deviceId: $0) } ?? false
-        session.send(.lockState(locked: ScreenLock.isLocked, unlockAllowed: allowed && isNearby(session)))
+        session.send(.lockState(locked: ScreenLock.isPasswordLocked, unlockAllowed: allowed && isNearby(session)))
     }
 
     /// 연결 상대 주소가 Tailscale이 아닌지. 주소를 알 수 없으면 가깝지 않은 것으로 본다
@@ -450,7 +450,7 @@ final class DeckServer {
         let refusal = UnlockPolicy.check(allowed: authority.isUnlockAllowed(deviceId: deviceId),
                                          nearby: isNearby(session),
                                          limiterAllows: unlockLimiters[deviceId, default: UnlockLimiter()].allows(now: .now),
-                                         locked: ScreenLock.isLocked)
+                                         locked: ScreenLock.isPasswordLocked)
         if let refusal {
             print("[unlock] refused:", refusal.rawValue)
             return session.send(.unlockResult(refusal))
@@ -468,7 +468,7 @@ final class DeckServer {
                 }
                 // 잠금 화면이 비밀번호를 확인하고 풀리기까지 기다린다
                 try? await Task.sleep(for: .seconds(2))
-                if ScreenLock.isLocked {
+                if ScreenLock.isPasswordLocked {
                     self.unlockLimiters[deviceId, default: UnlockLimiter()].recordFailure(now: .now)
                     session?.send(.unlockResult(.wrongPassword))
                 } else {

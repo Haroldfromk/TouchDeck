@@ -26,4 +26,14 @@ enum ScreenLock {
         }
         return NSWorkspace.shared.runningApplications.contains { $0.bundleIdentifier == "com.apple.ScreenSaver.Engine" }
     }
+
+    /// 잠금 풀기용: 시스템이 "화면 잠김"이라고 할 때만 true. 화면 보호기만 도는 건 넣지 않는다.
+    /// 암호 없이 깨어나는 화면 보호기에 비밀번호를 치면, 첫 입력에 보호기가 걷히고 나머지가 앞의 앱에 들어간다
+    static var isPasswordLocked: Bool {
+        passwordLocked(session: CGSessionCopyCurrentDictionary() as? [String: Any])
+    }
+
+    static func passwordLocked(session: [String: Any]?) -> Bool {
+        (session?["CGSSessionScreenIsLocked"] as? NSNumber)?.boolValue == true
+    }
 }

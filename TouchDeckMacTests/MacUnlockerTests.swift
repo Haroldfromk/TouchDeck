@@ -67,3 +67,12 @@ private final class Counter: @unchecked Sendable {
 @Test func unlockIsQuiet() {
     #expect(DeckServer.isQuiet(.unlock(password: "x")))
 }
+
+/// 잠금 풀기는 시스템이 "화면 잠김"이라고 할 때만. 화면 보호기만 돌고 있으면(암호 없이 깨어나는 상태) 치지 않는다.
+/// 첫 입력에 화면 보호기가 걷히면 나머지 비밀번호가 앞에 떠 있는 앱에 들어간다
+@Test func unlockNeedsSystemScreenLock() {
+    #expect(ScreenLock.passwordLocked(session: ["CGSSessionScreenIsLocked": NSNumber(value: true)]))
+    #expect(!ScreenLock.passwordLocked(session: ["CGSSessionScreenIsLocked": NSNumber(value: false)]))
+    #expect(!ScreenLock.passwordLocked(session: [:]))
+    #expect(!ScreenLock.passwordLocked(session: nil))
+}
