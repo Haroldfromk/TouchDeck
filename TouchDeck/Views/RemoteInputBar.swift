@@ -62,10 +62,15 @@ struct RemoteInputBar: View {
                     .font(.callout)
                     .foregroundStyle(DeckTheme.legendDim)
                     .tint(DeckTheme.legend)
-                Button("보내기", action: send)
-                    .font(.callout.weight(.semibold))
-                    .buttonStyle(.borderedProminent)
-                    .tint(DeckTheme.terminal)
+                Button(action: send) {
+                    Text("보내기")
+                        .font(.callout.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                        .background(DeckTheme.terminal, in: .rect(cornerRadius: 8))
+                }
+                .buttonStyle(KeyPressStyle())
             }
         }
         .padding(10)
@@ -100,7 +105,7 @@ private struct KeyButton: View {
                 .accessibilityAction { send() }
         } else {
             Button(action: send) { label }
-                .buttonStyle(.plain)
+                .buttonStyle(KeyPressStyle())
                 .accessibilityLabel(item.spoken)
         }
     }
@@ -126,10 +131,12 @@ private struct KeyButton: View {
     /// 누르자마자 한 번, 0.4초 뒤부터 0.08초마다
     private func startRepeating() {
         guard repeater == nil else { return }
+        KeyHaptics.press()
         send()
         repeater = Task { @MainActor in
             try? await Task.sleep(for: .seconds(0.4))
             while !Task.isCancelled {
+                KeyHaptics.tick()
                 send()
                 try? await Task.sleep(for: .seconds(0.08))
             }

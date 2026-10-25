@@ -67,25 +67,25 @@ private struct ModeKey: View {
     let action: () -> Void
 
     var body: some View {
-        GeometryReader { geo in
-            let side = min(geo.size.width, geo.size.height)
-            RoundedRectangle(cornerRadius: side * 0.16)
-                .fill(DeckTheme.socket)
-                .overlay(RoundedRectangle(cornerRadius: side * 0.16).strokeBorder(.white.opacity(0.06), lineWidth: 1))
-                .overlay {
-                    Text(title)
-                        .font(DeckTheme.legendFont(size: side * 0.2))
-                        .foregroundStyle(DeckTheme.legendDim)
-                }
+        Button(action: action) {
+            GeometryReader { geo in
+                let side = min(geo.size.width, geo.size.height)
+                RoundedRectangle(cornerRadius: side * 0.16)
+                    .fill(DeckTheme.socket)
+                    .overlay(RoundedRectangle(cornerRadius: side * 0.16).strokeBorder(.white.opacity(0.06), lineWidth: 1))
+                    .overlay {
+                        Text(title)
+                            .font(DeckTheme.legendFont(size: side * 0.2))
+                            .foregroundStyle(DeckTheme.legendDim)
+                    }
+            }
+            .contentShape(.rect)
         }
-        .contentShape(.rect)
-        .onTapGesture { if enabled { action() } }
+        .buttonStyle(KeyPressStyle())
+        .disabled(!enabled)
         .opacity(enabled ? 1 : 0.4)
-        .accessibilityElement()
         .accessibilityLabel(title == "기호" ? "기호 화면" : "숫자 화면")
         .accessibilityHint(enabled ? "" : "맥 TouchDeck을 새 버전으로 설치해야 쓸 수 있어요")
-        .accessibilityAddTraits(.isButton)
-        .accessibilityAction { if enabled { action() } }
     }
 }
 
@@ -97,7 +97,7 @@ private struct KeypadKey: View {
     /// 짧게 탭해도 눌림이 보이게 (아이패드는 진동이 없다)
     @State private var tapFlash = false
     private var down: Bool { pressed || tapFlash }
-    private let haptic = UIImpactFeedbackGenerator(style: .light)
+    @State private var haptic = PressHaptic()
 
     var body: some View {
         GeometryReader { geo in
@@ -117,7 +117,7 @@ private struct KeypadKey: View {
         }
         .contentShape(.rect)
         .onTapGesture {
-            haptic.impactOccurred()
+            haptic.tapped()
             tapFlash = true
             Task {
                 try? await Task.sleep(for: .milliseconds(120))
@@ -125,7 +125,10 @@ private struct KeypadKey: View {
             }
             onPress(key)
         }
-        .onLongPressGesture(minimumDuration: 10) {} onPressingChanged: { pressed = $0 }
+        .onLongPressGesture(minimumDuration: 10) {} onPressingChanged: { now in
+            pressed = now
+            if now { haptic.touched() }
+        }
         .accessibilityElement()
         .accessibilityLabel(accessibilityName)
         .accessibilityAddTraits(.isButton)

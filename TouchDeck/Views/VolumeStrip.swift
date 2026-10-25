@@ -148,6 +148,7 @@ struct VolumeKeyCap: View {
 
     @State private var pressed = false
     @State private var tapFlash = false
+    @State private var haptic = PressHaptic()
     private var down: Bool { pressed || tapFlash }
 
     var body: some View {
@@ -170,7 +171,7 @@ struct VolumeKeyCap: View {
         .animation(.spring(duration: 0.1), value: down)
         .contentShape(.rect)
         .onTapGesture {
-            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            haptic.tapped()
             tapFlash = true
             Task {
                 try? await Task.sleep(for: .milliseconds(120))
@@ -178,7 +179,10 @@ struct VolumeKeyCap: View {
             }
             action()
         }
-        .onLongPressGesture(minimumDuration: 10) {} onPressingChanged: { pressed = $0 }
+        .onLongPressGesture(minimumDuration: 10) {} onPressingChanged: { now in
+            pressed = now
+            if now { haptic.touched() }
+        }
         .accessibilityElement()
         .accessibilityLabel(label)
         .accessibilityAddTraits(.isButton)

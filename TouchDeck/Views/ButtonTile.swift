@@ -14,6 +14,7 @@ struct ButtonTile: View {
     @State private var pressed = false
     /// 짧게 탭하면 "누르고 있는 동안" 신호가 오기 전에 손이 떨어진다. 그래도 눌림이 보이게 잠깐 켠다
     @State private var tapFlash = false
+    @State private var haptic = PressHaptic()
     private var down: Bool { pressed || tapFlash }
 
     var body: some View {
@@ -36,7 +37,10 @@ struct ButtonTile: View {
         .onLongPressGesture(minimumDuration: 0.45) {
             UIImpactFeedbackGenerator(style: .medium).impactOccurred()
             onEdit()
-        } onPressingChanged: { pressed = $0 }
+        } onPressingChanged: { now in
+            pressed = now
+            if now { haptic.touched() }
+        }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(button?.label ?? "빈 칸")
         .accessibilityHint(button == nil ? "버튼 추가" : "맥에서 실행")
@@ -46,7 +50,7 @@ struct ButtonTile: View {
 
     /// 0.12초 동안 확실히 눌렸다 올라온다. 아이패드는 진동이 없어서 화면으로 보여줘야 한다
     private func flashPress() {
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        haptic.tapped()
         tapFlash = true
         Task {
             try? await Task.sleep(for: .milliseconds(120))
