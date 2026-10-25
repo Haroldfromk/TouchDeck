@@ -115,5 +115,5 @@ import Testing
 
 @Test func routeFromMacNeedsProtocolFive() {
     #expect(DeckProtocol.routeFromMac == 5)
-    #expect(DeckProtocol.current == DeckProtocol.routeFromMac)
+    #expect(DeckProtocol.current >= DeckProtocol.routeFromMac)
 }

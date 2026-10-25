@@ -36,7 +36,8 @@ struct DeckView: View {
                         // 오른쪽 "밖에서 붙기" 버튼으로 밖에서 붙을 맥 주소를 넣는다
                         ConnectionStatusView(phase: client.phase, route: client.shownRoute, remoteFailed: client.remoteFailed,
                                              macLocked: client.canUnlock && client.macLocked,
-                                             onRemote: { showRemote = true })
+                                             onRemote: { showRemote = true },
+                                             onLock: client.showsLock ? { client.lockMac() } : nil)
                         if client.macNeedsUpdate {
                             Label("맥 TouchDeck을 새 버전으로 설치해 주세요", systemImage: "arrow.down.circle")
                                 .font(.caption.weight(.medium))

@@ -384,6 +384,11 @@ final class DeckServer {
         case .unlock(let password):
             unlock(password, from: session)
 
+        case .lockMac:
+            // 잠그는 건 보안을 높이는 쪽이라 원격(Tailscale)에서도, 허용 설정 없이도 받는다
+            let ok = MacLocker.lock()
+            print("[lock] lock requested by", session.deviceName ?? "?", ok ? "" : "(손쉬운 사용 권한 없음)")
+
         case .hello, .pair, .auth:
             break
         }

@@ -7,6 +7,14 @@ struct UnlockOverlay: View {
 
     var body: some View {
         VStack(spacing: 8) {
+            if let notice = client.lockNotice {
+                Text(notice)
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(DeckTheme.legend)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(DeckTheme.socket, in: .capsule)
+            }
             if let notice = client.lockedHere {
                 // 다른 기기로 맥을 풀었는데 이 기기만 소식을 못 받았을 때도 여기서 다시 붙는다
                 VStack(spacing: 10) {

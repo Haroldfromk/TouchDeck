@@ -138,6 +138,27 @@ final class DeckClient {
     /// 연결돼 있고 맥이 잠겨 있지 않을 때만 버튼, 키패드, 화면 보기를 쓴다. 잠기면 잠금 풀기 버튼만 남는다
     var isUsable: Bool { isConnected && !(canUnlock && macLocked) }
 
+    /// 맥 앱이 잠그기를 아는 버전인지 (기능 번호 6부터)
+    var canLockMac: Bool { (macProtocol ?? DeckProtocol.legacy) >= DeckProtocol.lockMac }
+    /// 잠그기 버튼. 풀려 있을 때만. 원격이어도 보인다(잠그는 건 보안을 높이는 쪽)
+    var showsLock: Bool { isConnected && canLockMac && !macLocked }
+    /// 잠그기를 눌렀는데 맥이 잠기지 않았을 때 잠깐 보여 줄 안내
+    private(set) var lockNotice: String?
+
+    func lockMac() {
+        guard showsLock else { return }
+        lockNotice = nil
+        send(.lockMac)
+        // 맥은 잠기면 lockState로 알려 준다. 3초 안에 안 오면 손쉬운 사용 권한이 없거나 단축키가 안 먹은 것이다
+        Task {
+            try? await Task.sleep(for: .seconds(3))
+            guard isConnected, !macLocked else { return }
+            lockNotice = "맥이 잠기지 않았어요. 맥의 손쉬운 사용 권한을 확인해 주세요"
+            try? await Task.sleep(for: .seconds(4))
+            lockNotice = nil
+        }
+    }
+
     /// 맥이 잠겼다고 알고 있는데 이 기기에서는 풀 수 없을 때(원격, 허용 꺼짐) 보여 줄 안내.
     /// 다른 기기로 풀었는데 소식을 못 받으면 아무것도 못 누르니, 이때도 다시 연결할 수 있게 한다
     var lockedHere: String? {

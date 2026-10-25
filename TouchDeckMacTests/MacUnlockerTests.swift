@@ -83,3 +83,8 @@ private final class Counter: @unchecked Sendable {
     #expect(ScreenLock.locked(afterNotification: "com.apple.screenIsUnlocked") == false)
     #expect(ScreenLock.locked(afterNotification: "com.apple.other") == nil)
 }
+
+/// 맥 잠그기는 macOS 화면 잠금 단축키 ⌃⌘Q를 누른 것과 같다
+@Test func lockStrokeIsControlCommandQ() {
+    #expect(MacLocker.stroke == .key(CGKeyCode(kVK_ANSI_Q), [.maskControl, .maskCommand]))
+}

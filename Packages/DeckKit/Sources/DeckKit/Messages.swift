@@ -96,6 +96,8 @@ public enum ClientMessage: Equatable, Sendable {
     case pressKey(RemoteKey)
     /// 잠긴 맥에 칠 비밀번호. 아이폰이 Face ID를 거쳐 키체인에서 꺼낸 것. 어디에도 남기지 않는다
     case unlock(password: String)
+    /// 맥 화면을 잠근다(⌃⌘Q). 잠그는 건 보안을 높이는 쪽이라 원격에서도 받는다
+    case lockMac
 }
 
 /// 맥 잠금 풀기 결과
@@ -188,6 +190,7 @@ extension ClientMessage: Codable {
         case "typeText": self = .typeText(text: try c.decode(String.self, forKey: .text))
         case "pressKey": self = .pressKey(try c.decode(RemoteKey.self, forKey: .key))
         case "unlock": self = .unlock(password: try c.decode(String.self, forKey: .password))
+        case "lockMac": self = .lockMac
         case let other:
             throw DecodingError.dataCorruptedError(forKey: .type, in: c, debugDescription: "unknown type \(other)")
         }
@@ -266,6 +269,8 @@ extension ClientMessage: Codable {
         case .unlock(let password):
             try c.encode("unlock", forKey: .type)
             try c.encode(password, forKey: .password)
+        case .lockMac:
+            try c.encode("lockMac", forKey: .type)
         }
     }
 }

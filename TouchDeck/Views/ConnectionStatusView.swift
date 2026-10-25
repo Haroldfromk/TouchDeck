@@ -10,6 +10,8 @@ struct ConnectionStatusView: View {
     var macLocked = false
     /// 밖에서 붙을 맥 주소를 넣는 시트를 연다
     var onRemote: (() -> Void)?
+    /// 맥 잠그기. 맥이 풀려 있고 잠그기를 아는 버전일 때만 넘긴다
+    var onLock: (() -> Void)?
 
     /// 아이폰 세로처럼 좁은 화면. 연결돼 있으면 글 대신 아이콘만 보인다
     @Environment(\.horizontalSizeClass) private var sizeClass
@@ -63,6 +65,18 @@ struct ConnectionStatusView: View {
                     if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
                 }
                 .font(.subheadline.weight(.semibold))
+            }
+            if let onLock {
+                Button(action: onLock) {
+                    if compact {
+                        Image(systemName: "lock")
+                    } else {
+                        Label("맥 잠그기", systemImage: "lock")
+                    }
+                }
+                .font(.subheadline.weight(.semibold))
+                .buttonStyle(KeyPressStyle())
+                .accessibilityLabel("맥 잠그기")
             }
             if let onRemote {
                 Button(action: onRemote) {

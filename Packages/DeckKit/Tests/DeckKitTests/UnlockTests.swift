@@ -107,3 +107,20 @@ func localIsNearby(_ address: String) throws {
     let allowed: [ClientMessage] = [.unlock(password: "x"), .getApps, .stopScreen, .requestKeyframe]
     for message in allowed { #expect(LockGate.allowsWhileLocked(message), "\(message)") }
 }
+
+// MARK: - 맥 잠그기
+
+@Test func lockMacMessageRoundTrips() throws {
+    #expect(try ClientMessage.decode(ClientMessage.lockMac.encoded()) == .lockMac)
+    #expect(try ClientMessage.lockMac.encoded() == #"{"type":"lockMac"}"#)
+}
+
+@Test func lockMacNeedsProtocolSix() {
+    #expect(DeckProtocol.lockMac == 6)
+    #expect(DeckProtocol.current == DeckProtocol.lockMac)
+}
+
+/// 이미 잠긴 맥에는 잠그기를 받을 까닭이 없다(버튼도 숨는다)
+@Test func lockedMacIgnoresLockMac() {
+    #expect(!LockGate.allowsWhileLocked(.lockMac))
+}
