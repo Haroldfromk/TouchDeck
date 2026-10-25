@@ -7,6 +7,8 @@ struct TouchDeckApp: App {
     var body: some Scene {
         WindowGroup {
             DeckView(client: client)
+                // 맥 화면 보기는 전체 화면으로 덮으니 그 안에도 따로 붙인다
+                .overlay(alignment: .bottom) { UnlockOverlay(client: client) }
                 .sheet(isPresented: needsPairing) { PairingView(client: client) }
                 .task { client.start() }
                 .persistentSystemOverlays(.hidden)

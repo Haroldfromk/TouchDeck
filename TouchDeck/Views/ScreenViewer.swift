@@ -54,6 +54,8 @@ struct ScreenViewer: View {
         }
         .onChange(of: showInput) { _, open in if !open { barTop = nil } }
         .overlay(alignment: .topTrailing) { toolbar }
+        // 맥이 잠기면 화면 보기가 멈춘다. 여기서도 바로 잠금을 풀 수 있게
+        .overlay(alignment: .bottom) { UnlockOverlay(client: client) }
         .background(Color.black.ignoresSafeArea())
         .alert("맥 TouchDeck을 새 버전으로 설치해 주세요", isPresented: $showUpdateNotice) {
             Button("확인", role: .cancel) {}

@@ -24,6 +24,8 @@
 	<array>
 		<string>_touchdeck._tcp</string>
 	</array>
+	<key>NSFaceIDUsageDescription</key>
+	<string>맥 잠금을 풀 때 본인인지 확인해요</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>같은 와이파이에 있는 맥의 TouchDeck을 찾아 버튼 누름을 보내기 위해 로컬 네트워크를 사용합니다.</string>
 	<key>UILaunchScreen</key>

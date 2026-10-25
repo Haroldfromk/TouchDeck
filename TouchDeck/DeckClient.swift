@@ -118,6 +118,71 @@ final class DeckClient {
         return false
     }
 
+    // MARK: - 맥 잠금 풀기
+
+    enum UnlockStatus: Equatable {
+        case working
+        case failed(String)
+    }
+
+    /// 맥이 알려 준 잠김 여부와, 이 기기가 이 연결로 풀 수 있는지(맥 메뉴 허용 + 가까운 연결)
+    private(set) var macLocked = false
+    private(set) var unlockAllowed = false
+    private(set) var unlockStatus: UnlockStatus?
+    /// 저장된 맥 비밀번호가 없거나 바꾸려 할 때 비밀번호 시트를 띄운다
+    var needsMacPassword = false
+
+    /// 맥 앱이 잠금 풀기를 아는 버전인지 (기능 번호 4부터)
+    var canUnlock: Bool { (macProtocol ?? DeckProtocol.legacy) >= DeckProtocol.unlock }
+
+    /// 결정은 맥이 하고(unlockAllowed), 원격 주소로 붙었으면 여기서 한 번 더 거른다
+    var showsUnlock: Bool { isConnected && !isRemote && canUnlock && macLocked && unlockAllowed }
+
+    /// Face ID를 거쳐 키체인에서 꺼낸 맥 비밀번호를 봉투에 넣어 보낸다. 꺼낸 값은 보내자마자 버린다
+    func unlockMac() async {
+        guard showsUnlock, unlockStatus != .working else { return }
+        guard MacPasswordStore.hasPassword else {
+            needsMacPassword = true
+            return
+        }
+        unlockStatus = .working
+        guard let password = await MacPasswordStore.read(reason: "맥 잠금을 풀려면 확인해 주세요") else {
+            unlockStatus = nil
+            return
+        }
+        guard showsUnlock else {
+            unlockStatus = nil
+            return
+        }
+        send(.unlock(password: password))
+        // 맥이 답하지 않으면 버튼을 다시 누를 수 있게 돌려놓는다
+        Task {
+            try? await Task.sleep(for: .seconds(8))
+            if unlockStatus == .working { unlockStatus = .failed("맥에서 답이 없어요. 다시 눌러 주세요") }
+        }
+    }
+
+    /// 저장 못 하면 이유를 돌려준다
+    func saveMacPassword(_ password: String) -> String? {
+        MacPasswordStore.save(password)
+    }
+
+    func deleteMacPassword() {
+        MacPasswordStore.delete()
+        unlockStatus = nil
+    }
+
+    private static func unlockMessage(_ result: UnlockResult) -> String? {
+        switch result {
+        case .unlocked: nil
+        case .wrongPassword: "맥 비밀번호가 맞지 않아요. 버튼을 길게 눌러 바꿔 주세요"
+        case .notLocked: "맥이 이미 풀려 있어요"
+        case .notAllowed: "맥 메뉴에서 이 기기의 \"잠금 풀기 허용\"을 켜 주세요"
+        case .notNearby: "같은 와이파이에 있을 때만 풀 수 있어요"
+        case .tooManyTries: "여러 번 틀려서 5분 동안 쉬어요"
+        }
+    }
+
     func start() {
         guard browser == nil else { return }
         searchStarted = .now
@@ -434,6 +499,9 @@ final class DeckClient {
         video.reset()
         audioPlayer.stop()
         macProtocol = nil
+        macLocked = false
+        unlockAllowed = false
+        unlockStatus = nil
         isRemote = false
         remoteOverride = nil
         remoteTimer?.cancel()
@@ -542,8 +610,12 @@ final class DeckClient {
                 video.reset()
                 audioPlayer.stop()
             }
-        case .lockState, .unlockResult:
-            break
+        case .lockState(let locked, let allowed):
+            macLocked = locked
+            unlockAllowed = allowed
+            if !locked { unlockStatus = nil }
+        case .unlockResult(let result):
+            unlockStatus = Self.unlockMessage(result).map(UnlockStatus.failed)
         case .volume(let value, let muted, let available, let keysAllowed):
             if Date.now.timeIntervalSince(lastLocalVolumeChange) > 2 { volume = value }
             self.muted = muted
