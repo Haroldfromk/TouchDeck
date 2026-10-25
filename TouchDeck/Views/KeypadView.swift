@@ -96,10 +96,44 @@ private struct KeypadKey: View {
     @State private var pressed = false
     /// 짧게 탭해도 눌림이 보이게 (아이패드는 진동이 없다)
     @State private var tapFlash = false
-    private var down: Bool { pressed || tapFlash }
+    /// ⌫를 누르고 있는 중. 손을 떼면 저절로 false가 돼서 지우기가 멈추지 않는 일이 없다
+    @GestureState private var holding = false
+    @State private var repeater: Task<Void, Never>?
+    private var down: Bool { pressed || tapFlash || holding }
     @State private var haptic = PressHaptic()
 
     var body: some View {
+        Group {
+            if key == .delete {
+                // 맥 키보드처럼 0.4초 누르고 있으면 뗄 때까지 연달아 지운다 (화면 보기 입력칸의 ⌫와 같다)
+                keycap
+                    .gesture(DragGesture(minimumDistance: 0).updating($holding) { _, state, _ in state = true })
+                    .onChange(of: holding) { _, now in now ? startRepeating() : stopRepeating() }
+                    .onDisappear { stopRepeating() }
+            } else {
+                keycap
+                    .onTapGesture {
+                        haptic.tapped()
+                        tapFlash = true
+                        Task {
+                            try? await Task.sleep(for: .milliseconds(120))
+                            tapFlash = false
+                        }
+                        onPress(key)
+                    }
+                    .onLongPressGesture(minimumDuration: 10) {} onPressingChanged: { now in
+                        pressed = now
+                        if now { haptic.touched() }
+                    }
+            }
+        }
+        .accessibilityElement()
+        .accessibilityLabel(accessibilityName)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityAction { onPress(key) }
+    }
+
+    private var keycap: some View {
         GeometryReader { geo in
             let side = min(geo.size.width, geo.size.height)
             let lip = side * 0.06
@@ -116,23 +150,26 @@ private struct KeypadKey: View {
             .animation(.spring(duration: 0.1), value: down)
         }
         .contentShape(.rect)
-        .onTapGesture {
-            haptic.tapped()
-            tapFlash = true
-            Task {
-                try? await Task.sleep(for: .milliseconds(120))
-                tapFlash = false
+    }
+
+    /// 닿자마자 한 번(heavy), 0.4초 뒤부터 0.08초마다 톡톡(rigid)
+    private func startRepeating() {
+        guard repeater == nil else { return }
+        KeyHaptics.press()
+        onPress(key)
+        repeater = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(0.4))
+            while !Task.isCancelled {
+                KeyHaptics.tick()
+                onPress(key)
+                try? await Task.sleep(for: .seconds(0.08))
             }
-            onPress(key)
         }
-        .onLongPressGesture(minimumDuration: 10) {} onPressingChanged: { now in
-            pressed = now
-            if now { haptic.touched() }
-        }
-        .accessibilityElement()
-        .accessibilityLabel(accessibilityName)
-        .accessibilityAddTraits(.isButton)
-        .accessibilityAction { onPress(key) }
+    }
+
+    private func stopRepeating() {
+        repeater?.cancel()
+        repeater = nil
     }
 
     @ViewBuilder
