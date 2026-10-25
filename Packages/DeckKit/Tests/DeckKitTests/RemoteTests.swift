@@ -76,11 +76,27 @@ import Testing
 /// 아이폰은 자기 쪽 장치 이름을 엉뚱하게 알려 줄 때가 있다(Tailscale은 pdp_ip0, 직접 연결은 기타).
 /// 맥은 연결이 들어온 장치와 상대 주소를 정확히 알아서, 맥이 정한 길을 이름표로 쓴다
 @Test func macRouteUsesTailscaleAddressFirst() throws {
-    #expect(ConnectionRoute(interfaceName: "en0", isWiFi: true, isWired: false, remote: try #require(NWEndpoint.Host("100.64.0.1"))) == .vpn)
-    #expect(ConnectionRoute(interfaceName: "utun10", isWiFi: false, isWired: false, remote: try #require(NWEndpoint.Host("fd7a:115c:a1e0::1"))) == .vpn)
-    #expect(ConnectionRoute(interfaceName: "awdl0", isWiFi: true, isWired: false, remote: try #require(NWEndpoint.Host("fe80::1%awdl0"))) == .direct)
-    #expect(ConnectionRoute(interfaceName: "en8", isWiFi: false, isWired: true, remote: try #require(NWEndpoint.Host("192.168.0.20"))) == .wired)
-    #expect(ConnectionRoute(interfaceName: "en0", isWiFi: true, isWired: false, remote: nil) == .sameWiFi)
+    // Tailscale 주소면 어느 장치로 들어왔든 원격
+    #expect(ConnectionRoute(macSideRemote: try #require(NWEndpoint.Host("100.64.0.1")), link: nil) == .vpn)
+    #expect(ConnectionRoute(macSideRemote: try #require(NWEndpoint.Host("fd7a:115c:a1e0::1")), link: "utun10") == .vpn)
+    // 상대 주소가 직접 연결 장치에 붙어 있으면 직접 연결
+    #expect(ConnectionRoute(macSideRemote: try #require(NWEndpoint.Host("fe80::1")), link: "awdl0") == .direct)
+    #expect(ConnectionRoute(macSideRemote: try #require(NWEndpoint.Host("fe80::1")), link: "llw0") == .direct)
+    // 맥이 랜선(en8)이든 와이파이(en0)든 같은 네트워크. 와이파이인지 유선인지는 기기가 정한다
+    #expect(ConnectionRoute(macSideRemote: try #require(NWEndpoint.Host("fe80::1")), link: "en8") == .sameWiFi)
+    #expect(ConnectionRoute(macSideRemote: try #require(NWEndpoint.Host("192.168.0.20")), link: nil) == .sameWiFi)
+    // Xcode가 케이블로 여는 통로(utun)도 Tailscale 주소가 아니면 같은 네트워크
+    #expect(ConnectionRoute(macSideRemote: try #require(NWEndpoint.Host("fd08:d1fb:d78c::1")), link: "utun12") == .sameWiFi)
+}
+
+/// 맥이 같은 네트워크라고 하면 기기 쪽의 와이파이/유선 판단을 쓴다. 직접 연결과 원격은 맥 판단이 이긴다
+@Test func deviceRouteCombinesMacAndLocal() {
+    #expect(ConnectionRoute.shown(mac: .direct, local: .other) == .direct)
+    #expect(ConnectionRoute.shown(mac: .vpn, local: .wired) == .vpn)
+    #expect(ConnectionRoute.shown(mac: .sameWiFi, local: .wired) == .wired)
+    #expect(ConnectionRoute.shown(mac: .sameWiFi, local: .sameWiFi) == .sameWiFi)
+    #expect(ConnectionRoute.shown(mac: .sameWiFi, local: .other) == .sameWiFi)
+    #expect(ConnectionRoute.shown(mac: nil, local: .other) == .other)
 }
 
 @Test func routeMessageRoundTrips() throws {

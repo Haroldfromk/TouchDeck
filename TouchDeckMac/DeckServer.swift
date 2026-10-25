@@ -460,13 +460,15 @@ final class DeckServer {
     /// 맥이 아는 이 연결의 길. 연결이 들어온 장치(awdl0, en0, 유선, utun)와 상대 주소(Tailscale 범위)로 정한다
     private func sendRoute(to session: ClientSession) {
         guard session.stage == .authorized, session.protocolVersion >= DeckProtocol.routeFromMac else { return }
-        let connection = session.channel.connection
-        let interface = connection.currentPath?.availableInterfaces.first
         var remote: NWEndpoint.Host?
-        if case .hostPort(let host, _) = connection.endpoint { remote = host }
-        let route = ConnectionRoute(interfaceName: interface?.name, isWiFi: interface?.type == .wifi,
-                                    isWired: interface?.type == .wiredEthernet, remote: remote)
-        print("[server] route", session.deviceName ?? "?", interface?.name ?? "-", route.rawValue)
+        var link: String?
+        if case .hostPort(let host, _) = session.channel.connection.endpoint {
+            remote = host
+            // 근처 주소(fe80::…%en8)에는 실제로 탄 장치가 붙어 있다
+            if case .ipv6(let address) = host { link = address.interface?.name }
+        }
+        let route = ConnectionRoute(macSideRemote: remote, link: link)
+        print("[server] route", session.deviceName ?? "?", link ?? "-", route.rawValue)
         session.send(.route(route))
     }
 

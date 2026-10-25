@@ -346,7 +346,7 @@ final class DeckClient {
 
     /// 상태 줄과 화질이 쓰는 길. 원격 주소로 붙었으면 장치 이름이 무엇이든 원격으로 친다
     /// (아이폰은 Tailscale 연결의 길에 utun을 알려 주지 않고 pdp_ip0(cellular)만 알려 줘서 "기타 연결"로 보였다)
-    var shownRoute: ConnectionRoute? { isRemote ? .vpn : (macRoute ?? route) }
+    var shownRoute: ConnectionRoute? { isRemote ? .vpn : ConnectionRoute.shown(mac: macRoute, local: route) }
 
     private var screenSettings: ScreenSettings {
         ScreenQuality.settings(route: shownRoute, deviceLongSide: screenPixelLongSide, savedFPS: savedFPS,
