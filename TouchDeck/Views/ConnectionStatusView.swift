@@ -6,6 +6,8 @@ struct ConnectionStatusView: View {
     let phase: DeckClient.Phase
     var route: ConnectionRoute?
     var remoteFailed = false
+    /// 연결돼 있지만 맥이 잠겨 있다. 버튼들은 흐려진다
+    var macLocked = false
     /// 밖에서 붙을 맥 주소를 넣는 시트를 연다
     var onRemote: (() -> Void)?
 
@@ -59,12 +61,15 @@ struct ConnectionStatusView: View {
         switch phase {
         case .searching, .connecting:
             remoteFailed ? "밖에서 맥에 붙지 못했어요. 아이패드와 맥에서 Tailscale이 켜져 있는지 확인해 주세요" : phaseText
+        case .connected where macLocked:
+            "맥이 잠겨 있어요. 잠금을 풀면 다시 쓸 수 있어요"
         default: phaseText
         }
     }
 
     private var color: Color {
         switch phase {
+        case .connected where macLocked: DeckTheme.terminal
         case .connected: DeckTheme.command
         case .localNetworkDenied, .needsHomePairing: DeckTheme.failure
         default: DeckTheme.terminal

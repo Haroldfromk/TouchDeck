@@ -135,6 +135,9 @@ final class DeckClient {
     /// 맥 앱이 잠금 풀기를 아는 버전인지 (기능 번호 4부터)
     var canUnlock: Bool { (macProtocol ?? DeckProtocol.legacy) >= DeckProtocol.unlock }
 
+    /// 연결돼 있고 맥이 잠겨 있지 않을 때만 버튼, 키패드, 화면 보기를 쓴다. 잠기면 잠금 풀기 버튼만 남는다
+    var isUsable: Bool { isConnected && !(canUnlock && macLocked) }
+
     /// 결정은 맥이 하고(unlockAllowed), 원격 주소로 붙었으면 여기서 한 번 더 거른다
     var showsUnlock: Bool { isConnected && !isRemote && canUnlock && macLocked && unlockAllowed }
 

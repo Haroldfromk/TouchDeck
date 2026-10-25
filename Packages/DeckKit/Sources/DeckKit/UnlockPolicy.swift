@@ -62,3 +62,18 @@ public struct UnlockLimiter: Sendable {
         blockedUntil = .distantPast
     }
 }
+
+/// 맥이 잠겨 있는 동안 받을 메시지. 잠긴 맥 뒤에서 앱이 열리거나 명령이 돌거나,
+/// 잠금 화면 칸에 글자가 들어가지 않게 맥에 무언가를 하는 메시지는 막는다.
+/// default를 두지 않아서, 새 메시지를 더하면 여기서 정해야 컴파일된다
+public enum LockGate {
+    public static func allowsWhileLocked(_ message: ClientMessage) -> Bool {
+        switch message {
+        case .press, .typeKey, .typeText, .pressKey, .pointer, .setButton, .clearButton,
+             .setVolume, .volumeKey, .listFolder, .startScreen, .screenOptions:
+            false
+        case .unlock, .getApps, .listDisplays, .stopScreen, .requestKeyframe, .hello, .pair, .auth:
+            true
+        }
+    }
+}

@@ -35,6 +35,7 @@ struct DeckView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         // 오른쪽 "밖에서 붙기" 버튼으로 밖에서 붙을 맥 주소를 넣는다
                         ConnectionStatusView(phase: client.phase, route: client.shownRoute, remoteFailed: client.remoteFailed,
+                                             macLocked: client.canUnlock && client.macLocked,
                                              onRemote: { showRemote = true })
                         if client.macNeedsUpdate {
                             Label("맥 TouchDeck을 새 버전으로 설치해 주세요", systemImage: "arrow.down.circle")
@@ -47,7 +48,7 @@ struct DeckView: View {
                     }
                     .pickerStyle(.segmented)
                     .fixedSize()
-                    .disabled(!client.isConnected)
+                    .disabled(!client.isUsable)
                 }
                 // 맥 화면 탭은 모니터 카드를 넓게 쓰려고 볼륨 칸을 숨긴다
                 // 상태 줄의 "밖에서 붙기"는 끊겨 있을 때도 눌려야 해서 아래쪽만 막는다
@@ -66,10 +67,10 @@ struct DeckView: View {
                             .frame(height: 64)
                     }
                 }
-                .disabled(!client.isConnected)
+                .disabled(!client.isUsable)
             }
             .padding(20)
-            .opacity(client.isConnected ? 1 : 0.55)
+            .opacity(client.isUsable ? 1 : 0.55)
         }
         .background(DeckTheme.body.ignoresSafeArea())
         .overlay(alignment: .bottom) { failureBanner }

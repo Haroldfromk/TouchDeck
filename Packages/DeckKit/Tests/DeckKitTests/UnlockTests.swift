@@ -90,3 +90,20 @@ func localIsNearby(_ address: String) throws {
     limiter.recordFailure(now: start)
     #expect(limiter.allows(now: start))
 }
+
+// MARK: - 잠겨 있는 동안 받을 메시지
+
+/// 잠긴 맥 뒤에서 앱이 열리거나 명령이 돌거나, 잠금 화면 칸에 글자가 들어가지 않게 막는다
+@Test func lockedMacRefusesActions() {
+    let refused: [ClientMessage] = [
+        .press(page: 0, index: 0), .typeKey(.digit(1)), .typeText(text: "a"), .pressKey(.enter),
+        .pointer(PointerEvent(kind: .click, x: 0.5, y: 0.5)), .setButton(page: 0, index: 0, button: DeckButton(label: "a", action: .terminal(directory: nil))),
+        .clearButton(page: 0, index: 0), .setVolume(10), .volumeKey(.up), .listFolder(path: "~"),
+    ]
+    for message in refused { #expect(!LockGate.allowsWhileLocked(message), "\(message)") }
+}
+
+@Test func lockedMacStillAcceptsUnlockAndReads() {
+    let allowed: [ClientMessage] = [.unlock(password: "x"), .getApps, .stopScreen, .requestKeyframe]
+    for message in allowed { #expect(LockGate.allowsWhileLocked(message), "\(message)") }
+}

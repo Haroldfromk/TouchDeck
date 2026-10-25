@@ -291,6 +291,13 @@ final class DeckServer {
     }
 
     private func handleAuthorized(_ message: ClientMessage, from session: ClientSession) {
+        // 잠긴 맥에는 잠금 풀기 말고는 아무것도 하지 않는다. 예전 아이폰 앱은 잠김을 몰라서 버튼을 막지 못한다
+        if ScreenLock.isPasswordLocked && !LockGate.allowsWhileLocked(message) {
+            if case .press(let page, let index) = message {
+                session.send(.pressResult(page: page, index: index, ok: false, message: "맥이 잠겨 있어요"))
+            }
+            return
+        }
         switch message {
         case .press(let page, let index):
             guard config.layout.pages.indices.contains(page),
