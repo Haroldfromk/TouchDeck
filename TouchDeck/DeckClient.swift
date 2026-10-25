@@ -542,6 +542,8 @@ final class DeckClient {
                 video.reset()
                 audioPlayer.stop()
             }
+        case .lockState, .unlockResult:
+            break
         case .volume(let value, let muted, let available, let keysAllowed):
             if Date.now.timeIntervalSince(lastLocalVolumeChange) > 2 { volume = value }
             self.muted = muted

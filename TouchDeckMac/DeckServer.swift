@@ -349,6 +349,9 @@ final class DeckServer {
         case .pressKey(let key):
             screen.pressKey(key, from: session)
 
+        case .unlock:
+            break
+
         case .hello, .pair, .auth:
             break
         }

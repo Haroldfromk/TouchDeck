@@ -8,15 +8,18 @@ public struct TrustedDevice: Codable, Equatable, Hashable, Sendable {
     public var token: String
     /// 맥 메뉴의 "화면 보기 허용". 기본 꺼짐. 다시 페어링하면 다시 꺼진다.
     public var screenAllowed: Bool
+    /// 맥 메뉴의 "잠금 풀기 허용". 기본 꺼짐. 다시 페어링하면 다시 꺼진다.
+    public var unlockAllowed: Bool
 
-    public init(id: String, name: String, token: String, screenAllowed: Bool = false) {
+    public init(id: String, name: String, token: String, screenAllowed: Bool = false, unlockAllowed: Bool = false) {
         self.id = id
         self.name = name
         self.token = token
         self.screenAllowed = screenAllowed
+        self.unlockAllowed = unlockAllowed
     }
 
-    private enum CodingKeys: String, CodingKey { case id, name, token, screenAllowed }
+    private enum CodingKeys: String, CodingKey { case id, name, token, screenAllowed, unlockAllowed }
 
     /// 화면 기능 전에 저장한 config.json에는 screenAllowed가 없다. 그때는 꺼짐으로 읽는다.
     public init(from decoder: Decoder) throws {
@@ -25,6 +28,8 @@ public struct TrustedDevice: Codable, Equatable, Hashable, Sendable {
         name = try c.decode(String.self, forKey: .name)
         token = try c.decode(String.self, forKey: .token)
         screenAllowed = try c.decodeIfPresent(Bool.self, forKey: .screenAllowed) ?? false
+        // 잠금 풀기 전에 저장한 config.json에는 없다. 꺼짐으로 읽는다
+        unlockAllowed = try c.decodeIfPresent(Bool.self, forKey: .unlockAllowed) ?? false
     }
 }
 
@@ -120,6 +125,15 @@ public struct PairingAuthority: Sendable {
     public mutating func setScreenAllowed(_ allowed: Bool, deviceId: String) {
         guard let i = trusted.firstIndex(where: { $0.id == deviceId }) else { return }
         trusted[i].screenAllowed = allowed
+    }
+
+    public func isUnlockAllowed(deviceId: String) -> Bool {
+        trusted.first { $0.id == deviceId }?.unlockAllowed ?? false
+    }
+
+    public mutating func setUnlockAllowed(_ allowed: Bool, deviceId: String) {
+        guard let i = trusted.firstIndex(where: { $0.id == deviceId }) else { return }
+        trusted[i].unlockAllowed = allowed
     }
 
     public mutating func revoke(deviceId: String) {

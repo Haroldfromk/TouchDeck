@@ -94,6 +94,13 @@ public enum ClientMessage: Equatable, Sendable {
     case typeText(text: String)
     /// 보기 화면 특수 키 줄의 키 하나
     case pressKey(RemoteKey)
+    /// 잠긴 맥에 칠 비밀번호. 아이폰이 Face ID를 거쳐 키체인에서 꺼낸 것. 어디에도 남기지 않는다
+    case unlock(password: String)
+}
+
+/// 맥 잠금 풀기 결과
+public enum UnlockResult: String, Codable, Sendable {
+    case unlocked, wrongPassword, notLocked, notAllowed, notNearby, tooManyTries
 }
 
 /// 맥 → 기기
@@ -123,6 +130,9 @@ public enum ServerMessage: Equatable, Sendable {
     /// 영상 크기(픽셀). 프레임은 이 뒤로 바이너리 메시지로 온다
     case screenStarted(displayId: UInt32, width: Int, height: Int)
     case screenStatus(ScreenState, message: String?)
+    /// 맥이 잠겼는지와, 이 기기가 이 연결로 잠금을 풀 수 있는지(허용 켜짐 + 가까운 연결)
+    case lockState(locked: Bool, unlockAllowed: Bool)
+    case unlockResult(UnlockResult)
 }
 
 /// 모든 메시지가 쓰는 JSON 키. 최상위 `type`으로 종류를 나눈다.
@@ -130,6 +140,7 @@ private enum Key: String, CodingKey {
     case type, deviceId, deviceName, publicKey, proof, page, index, button, value
     case remaining, nonce, pages, items, ok, message, muted, available, keysAllowed, key, path, children
     case displayId, maxSide, width, height, state, fps, audio, text, bitrateCap
+    case locked, unlockAllowed, result, password
     case proto = "protocol"
 }
 
@@ -174,6 +185,7 @@ extension ClientMessage: Codable {
         case "pointer": self = .pointer(try PointerEvent(from: decoder))
         case "typeText": self = .typeText(text: try c.decode(String.self, forKey: .text))
         case "pressKey": self = .pressKey(try c.decode(RemoteKey.self, forKey: .key))
+        case "unlock": self = .unlock(password: try c.decode(String.self, forKey: .password))
         case let other:
             throw DecodingError.dataCorruptedError(forKey: .type, in: c, debugDescription: "unknown type \(other)")
         }
@@ -249,6 +261,9 @@ extension ClientMessage: Codable {
         case .pressKey(let key):
             try c.encode("pressKey", forKey: .type)
             try c.encode(key, forKey: .key)
+        case .unlock(let password):
+            try c.encode("unlock", forKey: .type)
+            try c.encode(password, forKey: .password)
         }
     }
 }
@@ -286,6 +301,9 @@ extension ServerMessage: Codable {
                                   width: try c.decode(Int.self, forKey: .width), height: try c.decode(Int.self, forKey: .height))
         case "screenStatus":
             self = .screenStatus(try c.decode(ScreenState.self, forKey: .state), message: try c.decodeIfPresent(String.self, forKey: .message))
+        case "lockState":
+            self = .lockState(locked: try c.decode(Bool.self, forKey: .locked), unlockAllowed: try c.decode(Bool.self, forKey: .unlockAllowed))
+        case "unlockResult": self = .unlockResult(try c.decode(UnlockResult.self, forKey: .result))
         case let other:
             throw DecodingError.dataCorruptedError(forKey: .type, in: c, debugDescription: "unknown type \(other)")
         }
@@ -350,6 +368,13 @@ extension ServerMessage: Codable {
             try c.encode("screenStatus", forKey: .type)
             try c.encode(state, forKey: .state)
             try c.encodeIfPresent(message, forKey: .message)
+        case .lockState(let locked, let unlockAllowed):
+            try c.encode("lockState", forKey: .type)
+            try c.encode(locked, forKey: .locked)
+            try c.encode(unlockAllowed, forKey: .unlockAllowed)
+        case .unlockResult(let result):
+            try c.encode("unlockResult", forKey: .type)
+            try c.encode(result, forKey: .result)
         }
     }
 }

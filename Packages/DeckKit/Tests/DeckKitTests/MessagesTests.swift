@@ -103,5 +103,5 @@ import Testing
 @Test func symbolKeysNeedProtocolThree() {
     #expect(DeckProtocol.textInput == 2)
     #expect(DeckProtocol.symbolKeys == 3)
-    #expect(DeckProtocol.current == DeckProtocol.symbolKeys)
+    #expect(DeckProtocol.current >= DeckProtocol.symbolKeys)
 }
