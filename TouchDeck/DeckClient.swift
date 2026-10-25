@@ -488,7 +488,9 @@ final class DeckClient {
             MainActor.assumeIsolated {
                 guard let self, let channel, channel === self.channel else { return }
                 self.route = ConnectionRoute(path: path)
-                print("[client] path", path.availableInterfaces.map { "\($0.name)(\($0.type))" }, self.route.map(\.label) ?? "-")
+                // 아이폰 혼자 짐작한 길과, 화면에 실제로 보이는 이름표(맥이 정한 값 우선)를 같이 찍는다
+                print("[client] path", path.availableInterfaces.map { "\($0.name)(\($0.type))" },
+                      "아이폰 짐작:", self.route.map(\.label) ?? "-", "화면:", self.shownRoute.map(\.label) ?? "-")
             }
         }
         self.channel = channel
@@ -639,6 +641,7 @@ final class DeckClient {
             if !locked { unlockStatus = nil }
         case .route(let route):
             macRoute = route
+            print("[client] route from Mac:", route.label, "화면:", shownRoute.map(\.label) ?? "-")
         case .unlockResult(let result):
             unlockStatus = Self.unlockMessage(result).map(UnlockStatus.failed)
             // 맥이 풀렸다고(또는 이미 풀려 있다고) 했으면 잠김 표시를 스스로 지운다. 풀림 알림을 놓쳐도 버튼이 남지 않게
