@@ -137,6 +137,13 @@ final class DeckServer {
         channel.onBinary = { [weak session] _ in
             MainActor.assumeIsolated { session?.channel.cancel() }
         }
+        // 직접 연결에서 와이파이로 바뀌는 것처럼 길이 바뀌면 기기 이름표도 따라가게 다시 알린다
+        connection.pathUpdateHandler = { [weak self, weak session] _ in
+            MainActor.assumeIsolated {
+                guard let self, let session else { return }
+                self.sendRoute(to: session)
+            }
+        }
         channel.onState = { [weak self, weak session] state in
             MainActor.assumeIsolated {
                 guard let self, let session else { return }
@@ -282,6 +289,7 @@ final class DeckServer {
         session.send(.authorized(protocolVersion: DeckProtocol.current))
         session.send(.layout(config.layout))
         sendLockState(to: session)
+        sendRoute(to: session)
         refreshDevices()
         Task {
             let volume = await actions.volume()
@@ -447,6 +455,19 @@ final class DeckServer {
         guard session.stage == .authorized, session.protocolVersion >= DeckProtocol.unlock else { return }
         let allowed = session.deviceId.map { authority.isUnlockAllowed(deviceId: $0) } ?? false
         session.send(.lockState(locked: locked ?? ScreenLock.isPasswordLocked, unlockAllowed: allowed && isNearby(session)))
+    }
+
+    /// 맥이 아는 이 연결의 길. 연결이 들어온 장치(awdl0, en0, 유선, utun)와 상대 주소(Tailscale 범위)로 정한다
+    private func sendRoute(to session: ClientSession) {
+        guard session.stage == .authorized, session.protocolVersion >= DeckProtocol.routeFromMac else { return }
+        let connection = session.channel.connection
+        let interface = connection.currentPath?.availableInterfaces.first
+        var remote: NWEndpoint.Host?
+        if case .hostPort(let host, _) = connection.endpoint { remote = host }
+        let route = ConnectionRoute(interfaceName: interface?.name, isWiFi: interface?.type == .wifi,
+                                    isWired: interface?.type == .wiredEthernet, remote: remote)
+        print("[server] route", session.deviceName ?? "?", interface?.name ?? "-", route.rawValue)
+        session.send(.route(route))
     }
 
     /// 연결 상대 주소가 Tailscale이 아닌지. 주소를 알 수 없으면 가깝지 않은 것으로 본다

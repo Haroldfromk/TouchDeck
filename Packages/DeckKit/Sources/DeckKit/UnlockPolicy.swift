@@ -7,15 +7,23 @@ public enum UnlockPolicy {
     /// 이름으로 된 주소처럼 판단할 수 없는 건 가깝지 않은 것으로 본다
     public static func isNearby(_ host: NWEndpoint.Host) -> Bool {
         switch host {
+        case .ipv4, .ipv6: !isTailscale(host)
+        default: false
+        }
+    }
+
+    /// 주소가 Tailscale 범위인지. 이름으로 된 주소는 알 수 없으니 false
+    public static func isTailscale(_ host: NWEndpoint.Host) -> Bool {
+        switch host {
         case .ipv4(let address):
-            return !isTailscale(ipv4: [UInt8](address.rawValue))
+            return isTailscale(ipv4: [UInt8](address.rawValue))
         case .ipv6(let address):
             let bytes = [UInt8](address.rawValue)
             // IPv4를 IPv6 모양으로 보여 주는 경우(::ffff:a.b.c.d)
             if bytes.count == 16, bytes[0..<10].allSatisfy({ $0 == 0 }), bytes[10] == 0xff, bytes[11] == 0xff {
-                return !isTailscale(ipv4: Array(bytes[12..<16]))
+                return isTailscale(ipv4: Array(bytes[12..<16]))
             }
-            return !(bytes.count == 16 && bytes[0..<6].elementsEqual([0xfd, 0x7a, 0x11, 0x5c, 0xa1, 0xe0]))
+            return bytes.count == 16 && bytes[0..<6].elementsEqual([0xfd, 0x7a, 0x11, 0x5c, 0xa1, 0xe0])
         default:
             return false
         }

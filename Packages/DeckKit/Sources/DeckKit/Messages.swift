@@ -133,6 +133,8 @@ public enum ServerMessage: Equatable, Sendable {
     /// 맥이 잠겼는지와, 이 기기가 이 연결로 잠금을 풀 수 있는지(허용 켜짐 + 가까운 연결)
     case lockState(locked: Bool, unlockAllowed: Bool)
     case unlockResult(UnlockResult)
+    /// 맥이 판단한 이 연결의 길(직접 연결, 같은 와이파이, 원격 등). 아이폰은 이 값을 이름표로 쓴다
+    case route(ConnectionRoute)
 }
 
 /// 모든 메시지가 쓰는 JSON 키. 최상위 `type`으로 종류를 나눈다.
@@ -140,7 +142,7 @@ private enum Key: String, CodingKey {
     case type, deviceId, deviceName, publicKey, proof, page, index, button, value
     case remaining, nonce, pages, items, ok, message, muted, available, keysAllowed, key, path, children
     case displayId, maxSide, width, height, state, fps, audio, text, bitrateCap
-    case locked, unlockAllowed, result, password
+    case locked, unlockAllowed, result, password, route
     case proto = "protocol"
 }
 
@@ -304,6 +306,7 @@ extension ServerMessage: Codable {
         case "lockState":
             self = .lockState(locked: try c.decode(Bool.self, forKey: .locked), unlockAllowed: try c.decode(Bool.self, forKey: .unlockAllowed))
         case "unlockResult": self = .unlockResult(try c.decode(UnlockResult.self, forKey: .result))
+        case "route": self = .route(try c.decode(ConnectionRoute.self, forKey: .route))
         case let other:
             throw DecodingError.dataCorruptedError(forKey: .type, in: c, debugDescription: "unknown type \(other)")
         }
@@ -375,6 +378,9 @@ extension ServerMessage: Codable {
         case .unlockResult(let result):
             try c.encode("unlockResult", forKey: .type)
             try c.encode(result, forKey: .result)
+        case .route(let route):
+            try c.encode("route", forKey: .type)
+            try c.encode(route, forKey: .route)
         }
     }
 }

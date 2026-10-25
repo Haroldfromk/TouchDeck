@@ -24,7 +24,7 @@ import Testing
 
 @Test func unlockNeedsProtocolFour() {
     #expect(DeckProtocol.unlock == 4)
-    #expect(DeckProtocol.current == DeckProtocol.unlock)
+    #expect(DeckProtocol.current >= DeckProtocol.unlock)
 }
 
 @Test func unlockAllowedFollowsSetter() {

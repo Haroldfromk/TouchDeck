@@ -1,4 +1,5 @@
 import Foundation
+import Network
 import Testing
 @testable import DeckKit
 
@@ -68,4 +69,27 @@ import Testing
 @Test func missingBitrateCapIsNil() throws {
     let old = #"{"type":"startScreen","displayId":7,"maxSide":2388,"fps":60,"audio":true}"#
     #expect(try ClientMessage.decode(old) == .startScreen(displayId: 7, maxSide: 2388, fps: 60, audio: true, bitrateCap: nil))
+}
+
+// MARK: - 맥이 정하는 길
+
+/// 아이폰은 자기 쪽 장치 이름을 엉뚱하게 알려 줄 때가 있다(Tailscale은 pdp_ip0, 직접 연결은 기타).
+/// 맥은 연결이 들어온 장치와 상대 주소를 정확히 알아서, 맥이 정한 길을 이름표로 쓴다
+@Test func macRouteUsesTailscaleAddressFirst() throws {
+    #expect(ConnectionRoute(interfaceName: "en0", isWiFi: true, isWired: false, remote: try #require(NWEndpoint.Host("100.64.0.1"))) == .vpn)
+    #expect(ConnectionRoute(interfaceName: "utun10", isWiFi: false, isWired: false, remote: try #require(NWEndpoint.Host("fd7a:115c:a1e0::1"))) == .vpn)
+    #expect(ConnectionRoute(interfaceName: "awdl0", isWiFi: true, isWired: false, remote: try #require(NWEndpoint.Host("fe80::1%awdl0"))) == .direct)
+    #expect(ConnectionRoute(interfaceName: "en8", isWiFi: false, isWired: true, remote: try #require(NWEndpoint.Host("192.168.0.20"))) == .wired)
+    #expect(ConnectionRoute(interfaceName: "en0", isWiFi: true, isWired: false, remote: nil) == .sameWiFi)
+}
+
+@Test func routeMessageRoundTrips() throws {
+    for route in [ConnectionRoute.sameWiFi, .direct, .wired, .vpn, .other] {
+        #expect(try ServerMessage.decode(ServerMessage.route(route).encoded()) == .route(route))
+    }
+}
+
+@Test func routeFromMacNeedsProtocolFive() {
+    #expect(DeckProtocol.routeFromMac == 5)
+    #expect(DeckProtocol.current == DeckProtocol.routeFromMac)
 }
