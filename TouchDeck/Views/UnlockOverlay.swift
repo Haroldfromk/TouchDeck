@@ -7,6 +7,30 @@ struct UnlockOverlay: View {
 
     var body: some View {
         VStack(spacing: 8) {
+            if let notice = client.lockedHere {
+                // 다른 기기로 맥을 풀었는데 이 기기만 소식을 못 받았을 때도 여기서 다시 붙는다
+                VStack(spacing: 10) {
+                    Text(notice)
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(DeckTheme.legend)
+                        .multilineTextAlignment(.center)
+                    Button {
+                        client.reconnectNow()
+                    } label: {
+                        Label("다시 연결", systemImage: "arrow.clockwise")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(DeckTheme.legend)
+                            .padding(.horizontal, 18)
+                            .padding(.vertical, 10)
+                            .background(DeckTheme.keycap, in: .capsule)
+                    }
+                    .buttonStyle(KeyPressStyle())
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .background(DeckTheme.socket, in: .rect(cornerRadius: 16))
+                .padding(.horizontal, 20)
+            }
             if client.showsUnlock {
                 if case .failed(let text) = client.unlockStatus {
                     HStack(spacing: 10) {

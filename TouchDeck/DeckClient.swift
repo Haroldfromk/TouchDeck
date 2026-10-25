@@ -138,6 +138,14 @@ final class DeckClient {
     /// 연결돼 있고 맥이 잠겨 있지 않을 때만 버튼, 키패드, 화면 보기를 쓴다. 잠기면 잠금 풀기 버튼만 남는다
     var isUsable: Bool { isConnected && !(canUnlock && macLocked) }
 
+    /// 맥이 잠겼다고 알고 있는데 이 기기에서는 풀 수 없을 때(원격, 허용 꺼짐) 보여 줄 안내.
+    /// 다른 기기로 풀었는데 소식을 못 받으면 아무것도 못 누르니, 이때도 다시 연결할 수 있게 한다
+    var lockedHere: String? {
+        guard isConnected, canUnlock, macLocked, !showsUnlock else { return nil }
+        if isRemote { return "맥이 잠겨 있어요. 밖에서는 풀 수 없어요" }
+        return "맥이 잠겨 있어요. 맥 메뉴에서 잠금 풀기를 허용하면 여기서 풀 수 있어요"
+    }
+
     /// 결정은 맥이 하고(unlockAllowed), 원격 주소로 붙었으면 여기서 한 번 더 거른다
     var showsUnlock: Bool { isConnected && !isRemote && canUnlock && macLocked && unlockAllowed }
 
