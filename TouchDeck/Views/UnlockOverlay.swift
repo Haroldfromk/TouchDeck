@@ -9,12 +9,18 @@ struct UnlockOverlay: View {
         VStack(spacing: 8) {
             if client.showsUnlock {
                 if case .failed(let text) = client.unlockStatus {
-                    Text(text)
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(DeckTheme.legend)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(DeckTheme.socket, in: .capsule)
+                    HStack(spacing: 10) {
+                        Text(text)
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(DeckTheme.legend)
+                        // 맥은 이미 풀렸는데 버튼이 남아 있을 때처럼, 연결이 의심스러우면 직접 다시 붙는다
+                        Button("다시 연결") { client.reconnectNow() }
+                            .font(.caption.weight(.semibold))
+                            .buttonStyle(KeyPressStyle())
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(DeckTheme.socket, in: .capsule)
                 }
                 Button {
                     Task { await client.unlockMac() }
@@ -31,6 +37,7 @@ struct UnlockOverlay: View {
                 .disabled(client.unlockStatus == .working)
                 // 맥 비밀번호를 바꿨을 때
                 .contextMenu {
+                    Button("다시 연결", systemImage: "arrow.clockwise") { client.reconnectNow() }
                     Button("비밀번호 바꾸기", systemImage: "key") { client.needsMacPassword = true }
                     Button("비밀번호 지우기", systemImage: "trash", role: .destructive) { client.deleteMacPassword() }
                 }

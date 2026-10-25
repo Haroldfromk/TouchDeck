@@ -158,11 +158,19 @@ final class DeckClient {
             return
         }
         send(.unlock(password: password))
-        // 맥이 답하지 않으면 버튼을 다시 누를 수 있게 돌려놓는다
+        // 맥이 답하지 않으면 연결이 끊긴 채 남은 것으로 본다(아이폰이 잠들어 있던 동안 끊겼을 수 있다). 다시 붙는다
         Task {
             try? await Task.sleep(for: .seconds(8))
-            if unlockStatus == .working { unlockStatus = .failed("맥에서 답이 없어요. 다시 눌러 주세요") }
+            guard unlockStatus == .working else { return }
+            reconnectNow()
+            unlockStatus = .failed("맥에서 답이 없어 다시 연결하는 중이에요")
         }
+    }
+
+    /// 연결이 살아 있는지 모를 때 끊고 처음부터 다시 찾는다(앱을 껐다 켜는 것과 같다)
+    func reconnectNow() {
+        print("[client] reconnect requested")
+        reconnectLater()
     }
 
     /// 저장 못 하면 이유를 돌려준다
