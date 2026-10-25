@@ -33,6 +33,19 @@ enum ScreenLock {
         passwordLocked(session: CGSessionCopyCurrentDictionary() as? [String: Any])
     }
 
+    static let lockedNotification = "com.apple.screenIsLocked"
+    static let unlockedNotification = "com.apple.screenIsUnlocked"
+
+    /// 잠김/풀림 알림이 온 순간에는 CGSession 값이 아직 바뀌기 전일 수 있다(풀렸는데 잠김으로 읽힘).
+    /// 그래서 알림 이름으로 정한다. 모르는 알림이면 nil
+    static func locked(afterNotification name: String) -> Bool? {
+        switch name {
+        case lockedNotification: true
+        case unlockedNotification: false
+        default: nil
+        }
+    }
+
     static func passwordLocked(session: [String: Any]?) -> Bool {
         (session?["CGSSessionScreenIsLocked"] as? NSNumber)?.boolValue == true
     }

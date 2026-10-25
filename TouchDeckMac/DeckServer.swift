@@ -429,21 +429,24 @@ final class DeckServer {
     /// 잠김과 풀림을 macOS 알림으로 받아 기기들에 알린다
     private func watchLock() {
         let center = DistributedNotificationCenter.default()
-        for name in ["com.apple.screenIsLocked", "com.apple.screenIsUnlocked"] {
+        for name in [ScreenLock.lockedNotification, ScreenLock.unlockedNotification] {
             lockObservers.append(center.addObserver(forName: .init(name), object: nil, queue: .main) { [weak self] _ in
                 MainActor.assumeIsolated {
                     guard let self else { return }
-                    for session in self.sessions { self.sendLockState(to: session) }
+                    // 이 순간 시스템 값은 아직 예전 값일 수 있어서 알림 이름을 그대로 보낸다
+                    let locked = ScreenLock.locked(afterNotification: name)
+                    for session in self.sessions { self.sendLockState(to: session, locked: locked) }
                 }
             })
         }
     }
 
     /// 허락받았고 잠금 풀기를 아는 버전의 기기에만. unlockAllowed는 "허용 켜짐 + 가까운 연결"
-    private func sendLockState(to session: ClientSession) {
+    /// locked: 알림으로 이미 아는 값. nil이면 지금 시스템 값을 읽는다
+    private func sendLockState(to session: ClientSession, locked: Bool? = nil) {
         guard session.stage == .authorized, session.protocolVersion >= DeckProtocol.unlock else { return }
         let allowed = session.deviceId.map { authority.isUnlockAllowed(deviceId: $0) } ?? false
-        session.send(.lockState(locked: ScreenLock.isPasswordLocked, unlockAllowed: allowed && isNearby(session)))
+        session.send(.lockState(locked: locked ?? ScreenLock.isPasswordLocked, unlockAllowed: allowed && isNearby(session)))
     }
 
     /// 연결 상대 주소가 Tailscale이 아닌지. 주소를 알 수 없으면 가깝지 않은 것으로 본다
@@ -483,6 +486,8 @@ final class DeckServer {
                     self.lastUnlock = (name, .now)
                     print("[unlock] unlocked by", name)
                     session?.send(.unlockResult(.unlocked))
+                    // 풀림 알림을 놓친 기기가 있어도 버튼이 남지 않게 다시 알린다
+                    for other in self.sessions { self.sendLockState(to: other, locked: false) }
                 }
             }
         }

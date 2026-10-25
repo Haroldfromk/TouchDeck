@@ -619,6 +619,11 @@ final class DeckClient {
             if !locked { unlockStatus = nil }
         case .unlockResult(let result):
             unlockStatus = Self.unlockMessage(result).map(UnlockStatus.failed)
+            // 맥이 풀렸다고(또는 이미 풀려 있다고) 했으면 잠김 표시를 스스로 지운다. 풀림 알림을 놓쳐도 버튼이 남지 않게
+            if result == .unlocked || result == .notLocked {
+                macLocked = false
+                unlockStatus = nil
+            }
         case .volume(let value, let muted, let available, let keysAllowed):
             if Date.now.timeIntervalSince(lastLocalVolumeChange) > 2 { volume = value }
             self.muted = muted

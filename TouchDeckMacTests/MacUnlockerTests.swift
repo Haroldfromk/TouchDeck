@@ -76,3 +76,10 @@ private final class Counter: @unchecked Sendable {
     #expect(!ScreenLock.passwordLocked(session: [:]))
     #expect(!ScreenLock.passwordLocked(session: nil))
 }
+
+/// 잠김/풀림 알림이 온 순간에는 시스템 값이 아직 바뀌기 전일 수 있다. 알림 이름 자체를 믿는다
+@Test func lockNotificationNameTellsTheState() {
+    #expect(ScreenLock.locked(afterNotification: "com.apple.screenIsLocked") == true)
+    #expect(ScreenLock.locked(afterNotification: "com.apple.screenIsUnlocked") == false)
+    #expect(ScreenLock.locked(afterNotification: "com.apple.other") == nil)
+}
