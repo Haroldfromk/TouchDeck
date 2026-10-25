@@ -11,22 +11,51 @@ struct ConnectionStatusView: View {
     /// 밖에서 붙을 맥 주소를 넣는 시트를 연다
     var onRemote: (() -> Void)?
 
+    /// 아이폰 세로처럼 좁은 화면. 연결돼 있으면 글 대신 아이콘만 보인다
+    @Environment(\.horizontalSizeClass) private var sizeClass
+    private var compact: Bool { sizeClass == .compact }
+    private var connected: Bool {
+        if case .connected = phase { return true }
+        return false
+    }
+    /// 연결된 평소 상태(잠김 포함)는 아이콘만. 찾는 중이나 오류는 무엇을 할지 알려야 해서 글을 남긴다
+    private var iconOnly: Bool { compact && connected }
+
     var body: some View {
         HStack(spacing: 10) {
             Circle()
                 .fill(color)
                 .frame(width: 8, height: 8)
                 .shadow(color: color, radius: 4)
-            Text(text)
-                .font(.subheadline.weight(.medium))
-                .foregroundStyle(DeckTheme.legend)
-            if case .connected = phase, let route {
-                Label(route.label, systemImage: route.symbol)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(DeckTheme.legendDim)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 3)
-                    .background(DeckTheme.socket, in: .capsule)
+                .accessibilityLabel(text)
+            if iconOnly {
+                if macLocked {
+                    Image(systemName: "lock.fill")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(DeckTheme.terminal)
+                        .accessibilityHidden(true)
+                }
+            } else {
+                Text(text)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(DeckTheme.legend)
+                    // 좁은 화면에서 안내 글이 잘리지 않게 두 줄까지
+                    .lineLimit(compact ? 2 : 1)
+            }
+            if connected, let route {
+                Group {
+                    if iconOnly {
+                        Image(systemName: route.symbol)
+                    } else {
+                        Label(route.label, systemImage: route.symbol)
+                    }
+                }
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(DeckTheme.legendDim)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(DeckTheme.socket, in: .capsule)
+                .accessibilityLabel(route.label)
             }
             Spacer()
             if case .localNetworkDenied = phase {
@@ -37,12 +66,17 @@ struct ConnectionStatusView: View {
             }
             if let onRemote {
                 Button(action: onRemote) {
-                    Label("밖에서 붙기", systemImage: "globe")
+                    if compact {
+                        Image(systemName: "globe")
+                    } else {
+                        Label("밖에서 붙기", systemImage: "globe")
+                    }
                 }
                 .font(.subheadline.weight(.semibold))
+                .accessibilityLabel("밖에서 붙기")
             }
         }
-        .frame(height: 24)
+        .frame(minHeight: 24)
     }
 
     private var phaseText: String {
