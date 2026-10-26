@@ -99,6 +99,7 @@ func localIsNearby(_ address: String) throws {
         .press(page: 0, index: 0), .typeKey(.digit(1)), .typeText(text: "a"), .pressKey(.enter),
         .pointer(PointerEvent(kind: .click, x: 0.5, y: 0.5)), .setButton(page: 0, index: 0, button: DeckButton(label: "a", action: .terminal(directory: nil))),
         .clearButton(page: 0, index: 0), .setVolume(10), .volumeKey(.up), .listFolder(path: "~"),
+        .moveButton(fromPage: 0, fromIndex: 0, toPage: 0, toIndex: 1, button: DeckButton(label: "a", action: .terminal(directory: nil))),
     ]
     for message in refused { #expect(!LockGate.allowsWhileLocked(message), "\(message)") }
 }
@@ -117,7 +118,11 @@ func localIsNearby(_ address: String) throws {
 
 @Test func lockMacNeedsProtocolSix() {
     #expect(DeckProtocol.lockMac == 6)
-    #expect(DeckProtocol.current == DeckProtocol.lockMac)
+}
+
+@Test func moveButtonNeedsProtocolSeven() {
+    #expect(DeckProtocol.moveButton == 7)
+    #expect(DeckProtocol.current == DeckProtocol.moveButton)
 }
 
 /// 이미 잠긴 맥에는 잠그기를 받을 까닭이 없다(버튼도 숨는다)

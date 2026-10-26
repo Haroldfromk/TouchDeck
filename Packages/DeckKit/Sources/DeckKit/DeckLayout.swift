@@ -70,6 +70,8 @@ public struct DeckPage: Codable, Equatable, Hashable, Sendable {
 
 public enum LayoutError: Error, Equatable {
     case outOfRange
+    /// 옮기려던 칸의 버튼이 그사이 바뀌었다(다른 기기가 고쳤다)
+    case stale
 }
 
 public struct DeckLayout: Codable, Equatable, Hashable, Sendable {
@@ -90,6 +92,18 @@ public struct DeckLayout: Codable, Equatable, Hashable, Sendable {
     public mutating func clear(page: Int, index: Int) throws {
         try checkRange(page: page, index: index)
         pages[page].buttons[index] = nil
+        normalize()
+    }
+
+    /// from 칸의 버튼을 to 칸으로 옮긴다. to가 비어 있으면 그 칸으로, 차 있으면 두 버튼이 자리를 바꾼다.
+    /// from 칸이 기기가 집어 든 버튼(button)과 다르면 옮기지 않는다
+    public mutating func move(fromPage: Int, fromIndex: Int, toPage: Int, toIndex: Int, expecting button: DeckButton) throws {
+        try checkRange(page: fromPage, index: fromIndex)
+        try checkRange(page: toPage, index: toIndex)
+        guard pages[fromPage].buttons[fromIndex] == button else { throw LayoutError.stale }
+        if fromPage == toPage && fromIndex == toIndex { return }
+        pages[fromPage].buttons[fromIndex] = pages[toPage].buttons[toIndex]
+        pages[toPage].buttons[toIndex] = button
         normalize()
     }
 

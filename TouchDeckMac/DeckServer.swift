@@ -304,6 +304,8 @@ final class DeckServer {
             if case .press(let page, let index) = message {
                 session.send(.pressResult(page: page, index: index, ok: false, message: "맥이 잠겨 있어요"))
             }
+            // 기기는 놓는 순간 화면을 미리 바꿔 둔다. 거절했으면 맥 배치로 되돌린다
+            if case .moveButton = message { session.send(.layout(config.layout)) }
             return
         }
         switch message {
@@ -328,6 +330,11 @@ final class DeckServer {
 
         case .clearButton(let page, let index):
             editLayout(session) { try $0.clear(page: page, index: index) }
+
+        case .moveButton(let fromPage, let fromIndex, let toPage, let toIndex, let button):
+            editLayout(session) {
+                try $0.move(fromPage: fromPage, fromIndex: fromIndex, toPage: toPage, toIndex: toIndex, expecting: button)
+            }
 
         case .setVolume(let value):
             Task {

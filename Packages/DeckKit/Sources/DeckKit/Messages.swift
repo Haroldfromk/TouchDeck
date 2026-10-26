@@ -73,6 +73,8 @@ public enum ClientMessage: Equatable, Sendable {
     case getApps
     case setButton(page: Int, index: Int, button: DeckButton)
     case clearButton(page: Int, index: Int)
+    /// from 칸의 버튼을 to 칸으로. to가 차 있으면 자리를 바꾼다. button은 기기가 집어 든 순간의 그 칸 버튼(맥이 다르면 옮기지 않는다)
+    case moveButton(fromPage: Int, fromIndex: Int, toPage: Int, toIndex: Int, button: DeckButton)
     case setVolume(Int)
     case volumeKey(VolumeKey)
     case typeKey(TypedKey)
@@ -144,7 +146,7 @@ private enum Key: String, CodingKey {
     case type, deviceId, deviceName, publicKey, proof, page, index, button, value
     case remaining, nonce, pages, items, ok, message, muted, available, keysAllowed, key, path, children
     case displayId, maxSide, width, height, state, fps, audio, text, bitrateCap
-    case locked, unlockAllowed, result, password, route
+    case locked, unlockAllowed, result, password, route, toPage, toIndex
     case proto = "protocol"
 }
 
@@ -169,6 +171,12 @@ extension ClientMessage: Codable {
                               button: try c.decode(DeckButton.self, forKey: .button))
         case "clearButton":
             self = .clearButton(page: try c.decode(Int.self, forKey: .page), index: try c.decode(Int.self, forKey: .index))
+        case "moveButton":
+            self = .moveButton(fromPage: try c.decode(Int.self, forKey: .page),
+                               fromIndex: try c.decode(Int.self, forKey: .index),
+                               toPage: try c.decode(Int.self, forKey: .toPage),
+                               toIndex: try c.decode(Int.self, forKey: .toIndex),
+                               button: try c.decode(DeckButton.self, forKey: .button))
         case "setVolume": self = .setVolume(try c.decode(Int.self, forKey: .value))
         case "volumeKey": self = .volumeKey(try c.decode(VolumeKey.self, forKey: .key))
         case "typeKey": self = .typeKey(try c.decode(TypedKey.self, forKey: .key))
@@ -227,6 +235,13 @@ extension ClientMessage: Codable {
             try c.encode("clearButton", forKey: .type)
             try c.encode(page, forKey: .page)
             try c.encode(index, forKey: .index)
+        case .moveButton(let fromPage, let fromIndex, let toPage, let toIndex, let button):
+            try c.encode("moveButton", forKey: .type)
+            try c.encode(fromPage, forKey: .page)
+            try c.encode(fromIndex, forKey: .index)
+            try c.encode(toPage, forKey: .toPage)
+            try c.encode(toIndex, forKey: .toIndex)
+            try c.encode(button, forKey: .button)
         case .setVolume(let value):
             try c.encode("setVolume", forKey: .type)
             try c.encode(value, forKey: .value)

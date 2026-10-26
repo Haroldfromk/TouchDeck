@@ -55,3 +55,91 @@ import Testing
     let old = Data(#"{"kind":"command","command":"blogrun"}"#.utf8)
     #expect(try JSONDecoder().decode(ButtonAction.self, from: old) == .command(command: "blogrun", directory: nil, keepOpen: true))
 }
+
+private func b(_ s: String) -> DeckButton { DeckButton(label: s, action: .terminal(directory: nil)) }
+
+@Test func moveIntoEmptySlot() throws {
+    var l = DeckLayout.empty
+    try l.set(b("a"), page: 0, index: 0)
+    try l.move(fromPage: 0, fromIndex: 0, toPage: 0, toIndex: 5, expecting: b("a"))
+    #expect(l.pages[0].buttons[0] == nil)
+    #expect(l.pages[0].buttons[5] == b("a"))
+}
+
+@Test func moveOntoFilledSlotSwaps() throws {
+    var l = DeckLayout.empty
+    try l.set(b("a"), page: 0, index: 0)
+    try l.set(b("b"), page: 0, index: 1)
+    try l.move(fromPage: 0, fromIndex: 0, toPage: 0, toIndex: 1, expecting: b("a"))
+    #expect(l.pages[0].buttons[0] == b("b"))
+    #expect(l.pages[0].buttons[1] == b("a"))
+}
+
+@Test func moveToSameSlotChangesNothing() throws {
+    var l = DeckLayout.empty
+    try l.set(b("a"), page: 0, index: 3)
+    let before = l
+    try l.move(fromPage: 0, fromIndex: 3, toPage: 0, toIndex: 3, expecting: b("a"))
+    #expect(l == before)
+}
+
+@Test func moveAcrossPages() throws {
+    var l = DeckLayout.empty
+    try l.set(b("a"), page: 0, index: 0)
+    try l.set(b("b"), page: 1, index: 4)
+    try l.move(fromPage: 1, fromIndex: 4, toPage: 0, toIndex: 0, expecting: b("b"))
+    #expect(l.pages[0].buttons[0] == b("b"))
+    #expect(l.pages[1].buttons[4] == b("a"))
+}
+
+@Test func moveToTrailingEmptyPageAddsPage() throws {
+    var l = DeckLayout.empty
+    try l.set(b("a"), page: 0, index: 0)          // pages: [a], []
+    try l.set(b("b"), page: 0, index: 1)
+    try l.move(fromPage: 0, fromIndex: 1, toPage: 1, toIndex: 0, expecting: b("b"))
+    #expect(l.pages.count == 3)
+    #expect(l.pages[1].buttons[0] == b("b"))
+    #expect(l.pages[2].isEmpty)
+}
+
+@Test func moveOffLastFilledPageTrimsTrailing() throws {
+    var l = DeckLayout.empty
+    try l.set(b("a"), page: 0, index: 0)
+    try l.set(b("b"), page: 1, index: 0)          // pages: [a], [b], []
+    try l.move(fromPage: 1, fromIndex: 0, toPage: 0, toIndex: 1, expecting: b("b"))
+    #expect(l.pages.count == 2)
+    #expect(l.pages[1].isEmpty)
+}
+
+@Test func moveEmptyingMiddlePageKeepsIt() throws {
+    var l = DeckLayout.empty
+    try l.set(b("a"), page: 0, index: 0)
+    try l.set(b("b"), page: 1, index: 0)
+    try l.set(b("c"), page: 2, index: 0)          // pages: [a], [b], [c], []
+    try l.move(fromPage: 1, fromIndex: 0, toPage: 0, toIndex: 1, expecting: b("b"))
+    #expect(l.pages.count == 4)
+    #expect(l.pages[1].isEmpty)
+}
+
+@Test func moveRejectsStaleButton() throws {
+    var l = DeckLayout.empty
+    try l.set(b("a"), page: 0, index: 0)
+    let before = l
+    #expect(throws: LayoutError.stale) {
+        try l.move(fromPage: 0, fromIndex: 0, toPage: 0, toIndex: 1, expecting: b("other"))
+    }
+    #expect(throws: LayoutError.stale) {
+        try l.move(fromPage: 0, fromIndex: 2, toPage: 0, toIndex: 1, expecting: b("a"))   // 빈 칸
+    }
+    #expect(l == before)
+}
+
+@Test func moveOutOfRangeThrows() {
+    var l = DeckLayout.empty
+    #expect(throws: LayoutError.outOfRange) {
+        try l.move(fromPage: 0, fromIndex: 0, toPage: 3, toIndex: 0, expecting: b("a"))
+    }
+    #expect(throws: LayoutError.outOfRange) {
+        try l.move(fromPage: 0, fromIndex: 12, toPage: 0, toIndex: 0, expecting: b("a"))
+    }
+}

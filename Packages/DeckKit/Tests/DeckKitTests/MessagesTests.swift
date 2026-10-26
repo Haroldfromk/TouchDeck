@@ -105,3 +105,13 @@ import Testing
     #expect(DeckProtocol.symbolKeys == 3)
     #expect(DeckProtocol.current >= DeckProtocol.symbolKeys)
 }
+
+@Test func moveButtonRoundTrip() throws {
+    let m = ClientMessage.moveButton(fromPage: 1, fromIndex: 2, toPage: 0, toIndex: 11,
+                                     button: DeckButton(label: "blogrun", action: .command(command: "blogrun", directory: nil)))
+    #expect(try ClientMessage.decode(m.encoded()) == m)
+    let obj = try JSONSerialization.jsonObject(with: Data(m.encoded().utf8)) as! [String: Any]
+    #expect(obj["type"] as? String == "moveButton")
+    #expect(obj["page"] as? Int == 1 && obj["index"] as? Int == 2)
+    #expect(obj["toPage"] as? Int == 0 && obj["toIndex"] as? Int == 11)
+}

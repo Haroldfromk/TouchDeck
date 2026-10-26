@@ -77,7 +77,7 @@ public struct UnlockLimiter: Sendable {
 public enum LockGate {
     public static func allowsWhileLocked(_ message: ClientMessage) -> Bool {
         switch message {
-        case .press, .typeKey, .typeText, .pressKey, .pointer, .setButton, .clearButton,
+        case .press, .typeKey, .typeText, .pressKey, .pointer, .setButton, .clearButton, .moveButton,
              .setVolume, .volumeKey, .listFolder, .startScreen, .screenOptions, .lockMac:
             false
         case .unlock, .getApps, .listDisplays, .stopScreen, .requestKeyframe, .hello, .pair, .auth:
