@@ -9,6 +9,9 @@ struct MenuContent: View {
     @State private var launchAtLogin = false
     @State private var loginError: String?
     @AppStorage(KeepAwake.key) private var keepAwakeOn = false
+    /// 명령 버튼과 새 터미널 버튼을 열 터미널. 설치된 것만 보여 준다
+    @State private var terminals: [TerminalApp] = []
+    @State private var terminal: TerminalApp = .terminal
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -118,6 +121,25 @@ struct MenuContent: View {
 
             Divider()
             VStack(alignment: .leading, spacing: 4) {
+                // 사용자가 고를 때만 저장한다. 메뉴를 열며 화면을 채우는 것만으로는 바꾸지 않는다
+                Picker("터미널", selection: Binding(
+                    get: { terminal },
+                    set: { app in
+                        terminal = app
+                        TerminalSettings.saved = app.bundleId
+                    }
+                )) {
+                    ForEach(terminals, id: \.self) { Text($0.name).tag($0) }
+                }
+                if case .missing(let app) = TerminalSettings.resolve() {
+                    Text("\(app.name)이(가) 지워졌어요. 다른 터미널을 고르세요")
+                        .font(.caption).foregroundStyle(.secondary)
+                } else if terminal.usesAppleScript {
+                    Text("처음 한 번 macOS가 터미널 제어 허락을 물어봐요")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            VStack(alignment: .leading, spacing: 4) {
                 Toggle("로그인 시 자동 실행", isOn: Binding(
                     get: { launchAtLogin },
                     set: { on in
@@ -143,6 +165,12 @@ struct MenuContent: View {
         // 시스템 설정에서 바꿨을 수도 있으니 창을 열 때마다 다시 읽는다
         .onAppear {
             launchAtLogin = loginItem.isOn
+            // 터미널은 메뉴를 열 때마다 다시 찾는다(그사이 설치하거나 지웠을 수 있다)
+            terminals = TerminalApp.allCases.filter { TerminalSettings.installed()[$0] != nil }
+            switch TerminalSettings.resolve() {
+            // 지워진 터미널이면 고르기 칸이 비어 보이고, 해롤드가 직접 다른 것을 고른다
+            case .ready(let app, _), .missing(let app): terminal = app
+            }
             server.screen.refreshPermission()
         }
     }

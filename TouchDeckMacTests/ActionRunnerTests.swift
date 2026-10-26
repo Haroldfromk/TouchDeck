@@ -37,12 +37,32 @@ import Testing
     #expect(captured.args == AlacrittyCommand.openArguments(command: nil, directory: nil))
 }
 
-@Test func missingAlacrittyFails() async {
+@Test func missingTerminalFailsWithName() async {
     var r = ActionRunner.fake()
-    r.alacrittyInstalled = { false }
+    r.resolveTerminal = { .missing(.iterm2) }
     let out = await r.run(.terminal(directory: nil))
     #expect(out.ok == false)
-    #expect(out.message == "Alacritty가 설치되어 있지 않음")
+    #expect(out.message == "iTerm2을(를) 찾을 수 없어요. 맥 메뉴에서 다른 터미널을 고르세요")
+}
+
+@Test func appleScriptTerminalRunsScript() async {
+    let captured = CapturedScript()
+    var r = ActionRunner.fake()
+    r.resolveTerminal = { .ready(.terminal, appPath: "/System/Applications/Utilities/Terminal.app") }
+    r.runScript = { captured.lines = $0; captured.text = $1 }
+    r.runOpen = { _ in Issue.record("open을 부르면 안 됨") }
+    let out = await r.run(.command(command: "blogrun", directory: "/tmp"))
+    #expect(out.ok)
+    #expect(captured.text == "cd '/tmp' && eval 'blogrun'")
+}
+
+@Test func appleScriptFailureExplainsAutomation() async {
+    var r = ActionRunner.fake()
+    r.resolveTerminal = { .ready(.terminal, appPath: "/T") }
+    r.runScript = { _, _ in throw NSError(domain: "osascript", code: 1) }
+    let out = await r.run(.terminal(directory: nil))
+    #expect(out.ok == false)
+    #expect(out.message == "기본 터미널을(를) 열지 못했어요. 시스템 설정 > 개인정보 보호 및 보안 > 자동화에서 TouchDeck을 켜 주세요")
 }
 
 @Test func missingAppFails() async {
@@ -110,4 +130,9 @@ final class Captured: @unchecked Sendable { var args: [String] = [] }
     r.runOpen = { captured.args = $0 }
     _ = await r.run(.command(command: "uploadimg", directory: "/tmp", keepOpen: false))
     #expect(captured.args.last == "eval 'uploadimg'")
+}
+
+final class CapturedScript: @unchecked Sendable {
+    var lines: [String] = []
+    var text: String?
 }

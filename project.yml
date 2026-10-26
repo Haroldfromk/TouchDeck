@@ -48,6 +48,7 @@ targets:
       properties:
         CFBundleDisplayName: TouchDeck
         LSUIElement: true
+        NSAppleEventsUsageDescription: 버튼을 누르면 고른 터미널에 새 창을 열고 명령을 실행하기 위해 사용합니다.
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.harold.TouchDeckMac
