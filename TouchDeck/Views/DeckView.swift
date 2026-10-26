@@ -14,6 +14,8 @@ struct DeckView: View {
     /// 끄는 버튼의 위치를 재는 좌표. 페이지 하나가 보이는 칸과 같다
     static let gridSpace = "deckGrid"
     private static let spacing: CGFloat = 14
+    /// 페이지 사이 틈. 잘라 내는 테두리를 이 절반만큼 넓혀서, 떠오르거나 집어 든 가장자리 버튼이 잘리지 않고 옆 페이지는 비치지 않는다
+    private static let pageGap: CGFloat = 32
 
     /// 끌려 나간 버튼. 손가락을 따라 그리드 위에 떠 있다
     struct Lift {
@@ -160,13 +162,13 @@ struct DeckView: View {
         VStack(spacing: 10) {
             GeometryReader { geo in
                 let size = geo.size
-                HStack(spacing: 0) {
+                HStack(spacing: Self.pageGap) {
                     ForEach(Array(client.layout.pages.enumerated()), id: \.offset) { pageIndex, deckPage in
                         grid(deckPage, page: pageIndex, columns: columns, size: size)
                             .frame(width: size.width, height: size.height)
                     }
                 }
-                .offset(x: -CGFloat(page) * size.width + swipe)
+                .offset(x: -CGFloat(page) * (size.width + Self.pageGap) + swipe)
                 .frame(width: size.width, height: size.height, alignment: .leading)
                 .animation(.spring(duration: 0.3), value: page)
                 .overlay { liftedTile(columns: columns, size: size) }
@@ -182,7 +184,7 @@ struct DeckView: View {
                 }
             }
             .coordinateSpace(.named(Self.gridSpace))
-            .clipped()
+            .mask { Rectangle().padding(-Self.pageGap / 2) }
 
             PageDots(count: client.layout.pages.count, current: page)
         }
