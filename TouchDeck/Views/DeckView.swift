@@ -11,6 +11,18 @@ struct EditTarget: Identifiable {
 /// 가로(아이패드 B안): 왼쪽 4×3 키 + 오른쪽 세로 볼륨. 세로(아이폰): 3×4 키 + 아래 가로 볼륨.
 /// 화면 전체는 스크롤되지 않고, 페이지는 옆으로 밀어 넘긴다.
 struct DeckView: View {
+    /// 끄는 버튼의 위치를 재는 좌표. 페이지 하나가 보이는 칸과 같다
+    static let gridSpace = "deckGrid"
+    private static let spacing: CGFloat = 14
+
+    /// 끌려 나간 버튼. 손가락을 따라 그리드 위에 떠 있다
+    struct Lift {
+        let page: Int
+        let index: Int
+        let button: DeckButton
+        var location: CGPoint
+    }
+
     @Bindable var client: DeckClient
     @State private var page = 0
     @State private var editing: EditTarget?
@@ -22,6 +34,12 @@ struct DeckView: View {
     @AppStorage("screen") private var screen = Screen.deck
     /// 버튼 옮기기 모드. 버튼들이 흔들리고, "완료"를 누르면 끝난다
     @State private var arranging = false
+    @State private var lift: Lift?
+    /// 끄는 버튼이 놓일 칸(지금 보이는 페이지)
+    @State private var target: Int?
+    @State private var pager = EdgePager()
+    /// 손으로 페이지를 미는 중인 거리
+    @GestureState(resetTransaction: Transaction(animation: .spring(duration: 0.3))) private var swipe: CGFloat = 0
     @Environment(\.scenePhase) private var scenePhase
 
     enum Screen: String, CaseIterable {
@@ -48,7 +66,7 @@ struct DeckView: View {
                         }
                     }
                     if arranging {
-                        Button("완료") { arranging = false }
+                        Button("완료") { endArranging() }
                             .buttonStyle(.borderedProminent)
                             .font(.headline)
                     } else {
@@ -111,10 +129,10 @@ struct DeckView: View {
         }
         // 맥이 잠기거나 끊기면, 앱이 뒤로 가면 옮기기 모드를 끝낸다
         .onChange(of: client.isUsable) { _, usable in
-            if !usable { arranging = false }
+            if !usable { endArranging() }
         }
         .onChange(of: scenePhase) { _, phase in
-            if phase != .active { arranging = false }
+            if phase != .active { endArranging() }
         }
         .preferredColorScheme(.dark)
     }
@@ -128,23 +146,112 @@ struct DeckView: View {
         }
     }
 
+    /// 페이지를 옆으로 늘어놓고 지금 페이지만 보이게 민다. TabView는 안 보이는 페이지를 치워서
+    /// 끄는 중에 페이지를 넘기면 끌던 손짓이 끊기고, 버튼을 끄는 손짓과 페이지 밀기가 다퉈서 직접 그린다
     private func pages(columns: Int) -> some View {
         VStack(spacing: 10) {
-            TabView(selection: $page) {
-                ForEach(Array(client.layout.pages.enumerated()), id: \.offset) { pageIndex, deckPage in
-                    grid(deckPage, page: pageIndex, columns: columns)
-                        .tag(pageIndex)
+            GeometryReader { geo in
+                let size = geo.size
+                HStack(spacing: 0) {
+                    ForEach(Array(client.layout.pages.enumerated()), id: \.offset) { pageIndex, deckPage in
+                        grid(deckPage, page: pageIndex, columns: columns, size: size)
+                            .frame(width: size.width, height: size.height)
+                    }
+                }
+                .offset(x: -CGFloat(page) * size.width + swipe)
+                .frame(width: size.width, height: size.height, alignment: .leading)
+                .animation(.spring(duration: 0.3), value: page)
+                .overlay { liftedTile(columns: columns, size: size) }
+                .contentShape(.rect)
+                .gesture(pageSwipe(width: size.width))
+                // 손가락이 가장자리에 가만히 있어도 시간이 가야 페이지가 넘어간다
+                .task(id: lift == nil) {
+                    while !Task.isCancelled, let current = lift {
+                        flipIfAtEdge(x: current.location.x, width: size.width)
+                        try? await Task.sleep(for: .milliseconds(100))
+                    }
                 }
             }
-            .tabViewStyle(.page(indexDisplayMode: .never))
+            .coordinateSpace(.named(Self.gridSpace))
+            .clipped()
 
             PageDots(count: client.layout.pages.count, current: page)
         }
     }
 
-    private func grid(_ deckPage: DeckPage, page pageIndex: Int, columns: Int) -> some View {
+    private func pageSwipe(width: CGFloat) -> some Gesture {
+        DragGesture(minimumDistance: 15)
+            .updating($swipe) { value, state, _ in
+                guard lift == nil else { return }
+                let dx = value.translation.width
+                // 첫 페이지 왼쪽, 마지막 페이지 오른쪽은 조금만 끌려 온다
+                let atEnd = (page == 0 && dx > 0) || (page == client.layout.pages.count - 1 && dx < 0)
+                state = atEnd ? dx / 3 : dx
+            }
+            .onEnded { value in
+                guard lift == nil else { return }
+                let dx = value.predictedEndTranslation.width
+                if dx < -width / 3 { page = min(page + 1, client.layout.pages.count - 1) }
+                if dx > width / 3 { page = max(page - 1, 0) }
+            }
+    }
+
+    @ViewBuilder
+    private func liftedTile(columns: Int, size: CGSize) -> some View {
+        if let lift {
+            let rows = DeckConstants.slotsPerPage / columns
+            ButtonTile(button: lift.button, icon: appIcon(lift.button), failed: false, onTap: {}, onEdit: {})
+                .frame(width: (size.width - Self.spacing * CGFloat(columns - 1)) / CGFloat(columns),
+                       height: (size.height - Self.spacing * CGFloat(rows - 1)) / CGFloat(rows))
+                .scaleEffect(1.1)
+                .shadow(color: .black.opacity(0.45), radius: 14, y: 8)
+                .position(lift.location)
+                .allowsHitTesting(false)
+        }
+    }
+
+    private func dragChanged(page pageIndex: Int, index: Int, button: DeckButton?, location: CGPoint,
+                             columns: Int, size: CGSize) {
+        if lift == nil {
+            guard let button else { return }
+            arranging = true
+            lift = Lift(page: pageIndex, index: index, button: button, location: location)
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        }
+        lift?.location = location
+        target = GridSlot.index(at: location, size: size, columns: columns, spacing: Self.spacing)
+        flipIfAtEdge(x: location.x, width: size.width)
+    }
+
+    private func flipIfAtEdge(x: CGFloat, width: CGFloat) {
+        let flip = pager.update(x: x, width: width, page: page, pageCount: client.layout.pages.count,
+                                now: Date().timeIntervalSinceReferenceDate)
+        if flip != 0 { page += flip }
+    }
+
+    private func dragEnded(at location: CGPoint?, columns: Int, size: CGSize) {
+        defer {
+            lift = nil
+            target = nil
+            pager.reset()
+        }
+        // 칸 사이나 그리드 밖에서 떼면 원래 자리로
+        guard let lift, let location,
+              let index = GridSlot.index(at: location, size: size, columns: columns, spacing: Self.spacing) else { return }
+        client.moveButton(fromPage: lift.page, fromIndex: lift.index, toPage: page, toIndex: index)
+        UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+    }
+
+    private func endArranging() {
+        arranging = false
+        lift = nil
+        target = nil
+        pager.reset()
+    }
+
+    private func grid(_ deckPage: DeckPage, page pageIndex: Int, columns: Int, size: CGSize) -> some View {
         let rows = DeckConstants.slotsPerPage / columns
-        return Grid(horizontalSpacing: 14, verticalSpacing: 14) {
+        return Grid(horizontalSpacing: Self.spacing, verticalSpacing: Self.spacing) {
             ForEach(0..<rows, id: \.self) { row in
                 GridRow {
                     ForEach(0..<columns, id: \.self) { column in
@@ -157,6 +264,15 @@ struct DeckView: View {
                             succeeded: success?.page == pageIndex && success?.index == index,
                             arranging: arranging,
                             phase: Double(index) * 0.13,
+                            lifted: lift?.page == pageIndex && lift?.index == index,
+                            highlighted: lift != nil && page == pageIndex && target == index
+                                && !(lift?.page == pageIndex && lift?.index == index),
+                            canDrag: client.canArrange,
+                            onDragChanged: { location in
+                                dragChanged(page: pageIndex, index: index, button: button, location: location,
+                                            columns: columns, size: size)
+                            },
+                            onDragEnded: { location in dragEnded(at: location, columns: columns, size: size) },
                             onTap: { client.press(page: pageIndex, index: index) },
                             onEdit: { editing = EditTarget(page: pageIndex, index: index, button: button) }
                         )
