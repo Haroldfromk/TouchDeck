@@ -280,6 +280,21 @@ final class DeckClient {
     func setButton(_ button: DeckButton, page: Int, index: Int) { send(.setButton(page: page, index: index, button: button)) }
     func clearButton(page: Int, index: Int) { send(.clearButton(page: page, index: index)) }
 
+    /// 맥 앱이 버튼 옮기기를 아는 버전인지 (기능 번호 7부터)
+    var canArrange: Bool { (macProtocol ?? DeckProtocol.legacy) >= DeckProtocol.moveButton }
+
+    /// 놓는 순간 화면을 먼저 바꾸고 맥에 보낸다. 맥이 보낸 배치가 오면 그것으로 덮인다
+    func moveButton(fromPage: Int, fromIndex: Int, toPage: Int, toIndex: Int) {
+        guard fromPage != toPage || fromIndex != toIndex,
+              layout.pages.indices.contains(fromPage),
+              layout.pages[fromPage].buttons.indices.contains(fromIndex),
+              let button = layout.pages[fromPage].buttons[fromIndex] else { return }
+        var next = layout
+        guard (try? next.move(fromPage: fromPage, fromIndex: fromIndex, toPage: toPage, toIndex: toIndex, expecting: button)) != nil else { return }
+        layout = next
+        send(.moveButton(fromPage: fromPage, fromIndex: fromIndex, toPage: toPage, toIndex: toIndex, button: button))
+    }
+
     /// 게이지로 값을 정한다. 끄는 동안 메시지가 쏟아지지 않게 0.1초에 한 번만 보내고,
     /// 맥이 읽어 온 옛 값이 끄는 중인 게이지를 되돌리지 않게 마지막으로 만진 뒤 2초는 맥 값을 무시한다.
     func setVolume(_ value: Int) {

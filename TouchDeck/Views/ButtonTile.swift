@@ -8,6 +8,10 @@ struct ButtonTile: View {
     let failed: Bool
     /// 맥이 "실행했음"을 돌려준 직후 잠깐 true. 테두리가 버튼 종류 색으로 빛난다
     var succeeded = false
+    /// 옮기기 모드. 버튼이 흔들리고, 탭하면 실행 대신 편집 창
+    var arranging = false
+    /// 흔들림 시작 시점을 칸마다 조금씩 어긋나게
+    var phase: Double = 0
     let onTap: () -> Void
     let onEdit: () -> Void
 
@@ -15,6 +19,7 @@ struct ButtonTile: View {
     /// 짧게 탭하면 "누르고 있는 동안" 신호가 오기 전에 손이 떨어진다. 그래도 눌림이 보이게 잠깐 켠다
     @State private var tapFlash = false
     @State private var haptic = PressHaptic()
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private var down: Bool { pressed || tapFlash }
 
     var body: some View {
@@ -28,11 +33,12 @@ struct ButtonTile: View {
                 }
             }
             .frame(width: geo.size.width, height: geo.size.height)
+            .modifier(Wiggle(on: arranging && button != nil && !reduceMotion, phase: phase))
         }
         .contentShape(.rect)
         .onTapGesture {
             flashPress()
-            button == nil ? onEdit() : onTap()
+            button == nil || arranging ? onEdit() : onTap()
         }
         .onLongPressGesture(minimumDuration: 0.45) {
             UIImpactFeedbackGenerator(style: .medium).impactOccurred()
@@ -77,7 +83,7 @@ struct ButtonTile: View {
                 }
                 .overlay {
                     RoundedRectangle(cornerRadius: radius)
-                        .strokeBorder(borderColor(button), lineWidth: failed || succeeded ? 3 : 1)
+                        .strokeBorder(borderColor(button), lineWidth: failed || succeeded ? 3 : (arrangeOutline ? 2 : 1))
                 }
                 .overlay(alignment: .topLeading) {
                     Circle()
@@ -98,8 +104,12 @@ struct ButtonTile: View {
     private func borderColor(_ button: DeckButton) -> Color {
         if failed { return DeckTheme.failure }
         if succeeded { return DeckTheme.accent(for: button.action) }
+        if arrangeOutline { return DeckTheme.legend.opacity(0.5) }
         return .white.opacity(0.06)
     }
+
+    /// 동작 줄이기를 켜면 흔드는 대신 테두리로 옮기기 모드임을 알린다
+    private var arrangeOutline: Bool { arranging && reduceMotion }
 
     @ViewBuilder
     private func legend(_ button: DeckButton, side: CGFloat) -> some View {
@@ -161,5 +171,22 @@ struct ButtonTile: View {
                     .foregroundStyle(.white.opacity(0.3))
             }
             .padding(.bottom, side * 0.06)
+    }
+}
+
+/// 옮기기 모드에서 iOS 홈 화면처럼 좌우로 살짝 기울며 흔들린다. 왕복 0.25초, ±1.5도
+private struct Wiggle: ViewModifier {
+    let on: Bool
+    let phase: Double
+
+    func body(content: Content) -> some View {
+        if on {
+            TimelineView(.animation) { context in
+                let t = context.date.timeIntervalSinceReferenceDate
+                content.rotationEffect(.degrees(1.5 * sin((t / 0.25 + phase) * 2 * .pi)))
+            }
+        } else {
+            content
+        }
     }
 }

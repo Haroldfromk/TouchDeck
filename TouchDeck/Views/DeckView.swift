@@ -20,6 +20,9 @@ struct DeckView: View {
     @State private var success: DeckClient.PressFeedback?
     /// 스트림덱 / 숫자 키패드 / 맥 화면. 마지막에 고른 화면을 기억한다
     @AppStorage("screen") private var screen = Screen.deck
+    /// 버튼 옮기기 모드. 버튼들이 흔들리고, "완료"를 누르면 끝난다
+    @State private var arranging = false
+    @Environment(\.scenePhase) private var scenePhase
 
     enum Screen: String, CaseIterable {
         case deck = "스트림덱"
@@ -44,12 +47,18 @@ struct DeckView: View {
                                 .foregroundStyle(DeckTheme.legendDim)
                         }
                     }
-                    Picker("화면", selection: $screen) {
-                        ForEach(Screen.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                    if arranging {
+                        Button("완료") { arranging = false }
+                            .buttonStyle(.borderedProminent)
+                            .font(.headline)
+                    } else {
+                        Picker("화면", selection: $screen) {
+                            ForEach(Screen.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                        }
+                        .pickerStyle(.segmented)
+                        .fixedSize()
+                        .disabled(!client.isUsable)
                     }
-                    .pickerStyle(.segmented)
-                    .fixedSize()
-                    .disabled(!client.isUsable)
                 }
                 // 맥 화면 탭은 모니터 카드를 넓게 쓰려고 볼륨 칸을 숨긴다
                 // 상태 줄의 "밖에서 붙기"는 끊겨 있을 때도 눌려야 해서 아래쪽만 막는다
@@ -100,6 +109,13 @@ struct DeckView: View {
         .onChange(of: client.layout.pages.count) { _, count in
             if page >= count { page = max(count - 1, 0) }
         }
+        // 맥이 잠기거나 끊기면, 앱이 뒤로 가면 옮기기 모드를 끝낸다
+        .onChange(of: client.isUsable) { _, usable in
+            if !usable { arranging = false }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase != .active { arranging = false }
+        }
         .preferredColorScheme(.dark)
     }
 
@@ -139,6 +155,8 @@ struct DeckView: View {
                             icon: appIcon(button),
                             failed: failure?.page == pageIndex && failure?.index == index,
                             succeeded: success?.page == pageIndex && success?.index == index,
+                            arranging: arranging,
+                            phase: Double(index) * 0.13,
                             onTap: { client.press(page: pageIndex, index: index) },
                             onEdit: { editing = EditTarget(page: pageIndex, index: index, button: button) }
                         )
