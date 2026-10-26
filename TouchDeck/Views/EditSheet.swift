@@ -145,8 +145,8 @@ struct EditSheet: View {
             Toggle("명령이 끝나면 창 닫기", isOn: $closeWhenDone)
         } footer: {
             Text(closeWhenDone
-                 ? "맥에서 Alacritty 새 창이 열리고 이 명령이 실행돼요. 끝나면 창이 저절로 닫혀요. 오류가 나도 바로 닫히니, 결과를 봐야 하는 명령은 끄세요."
-                 : "맥에서 Alacritty 새 창이 열리고, 평소 쓰는 zsh에서 이 명령이 실행돼요. ~/.zshrc의 별칭도 그대로 쓸 수 있어요. 끝나도 창이 남아서 서버(npm run dev 등)를 띄워 두기 좋아요.")
+                 ? "맥에서 고른 터미널에 새 창이 열리고 이 명령이 실행돼요. 끝나면 창이 저절로 닫혀요. 오류가 나도 바로 닫히니, 결과를 봐야 하는 명령은 끄세요."
+                 : "맥에서 고른 터미널에 새 창이 열리고, 평소 쓰는 zsh에서 이 명령이 실행돼요. ~/.zshrc의 별칭도 그대로 쓸 수 있어요. 끝나도 창이 남아서 서버(npm run dev 등)를 띄워 두기 좋아요.")
         }
     }
 
@@ -155,7 +155,7 @@ struct EditSheet: View {
             TextField("이름 (예: 새 터미널)", text: $label)
             folderField("시작 폴더 (비우면 홈 폴더)")
         } footer: {
-            Text("Alacritty가 이미 켜져 있어도 빈 창이 하나 더 열려요.")
+            Text("맥에서 고른 터미널에 빈 창이 하나 더 열려요. 터미널은 맥 메뉴에서 골라요.")
         }
     }
 
