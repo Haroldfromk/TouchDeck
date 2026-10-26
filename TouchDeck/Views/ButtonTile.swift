@@ -18,8 +18,8 @@ struct ButtonTile: View {
     var highlighted = false
     /// 맥이 옮기기를 알 때만 끌 수 있다. 아니면 길게 눌렀다 떼는 것처럼 편집 창
     var canDrag = false
-    /// 10pt 넘게 끈 뒤부터 손가락 위치(DeckView.gridSpace 좌표)
-    var onDragChanged: (CGPoint) -> Void = { _ in }
+    /// 10pt 넘게 끈 뒤부터 손가락 위치(DeckView.gridSpace 좌표). 둘째 값은 이번 끌기의 첫 신호인지
+    var onDragChanged: (CGPoint, Bool) -> Void = { _, _ in }
     /// 끌던 손을 뗐을 때. 위치를 모르면 nil
     var onDragEnded: (CGPoint?) -> Void = { _ in }
     let onTap: () -> Void
@@ -50,7 +50,7 @@ struct ButtonTile: View {
                 }
             }
             .frame(width: geo.size.width, height: geo.size.height)
-            .modifier(Wiggle(on: arranging && button != nil && !reduceMotion, phase: phase))
+            .modifier(Wiggle(on: arranging && button != nil && !lifted && !reduceMotion, phase: phase))
         }
         .contentShape(.rect)
         .onTapGesture {
@@ -98,8 +98,10 @@ struct ButtonTile: View {
                 guard case .second(true, let drag?) = value else { return }
                 if !dragStarted, canDrag, hypot(drag.translation.width, drag.translation.height) >= 10 {
                     dragStarted = true
+                    onDragChanged(drag.location, true)
+                } else if dragStarted {
+                    onDragChanged(drag.location, false)
                 }
-                if dragStarted { onDragChanged(drag.location) }
             }
             .onEnded { value in
                 endHandled = true

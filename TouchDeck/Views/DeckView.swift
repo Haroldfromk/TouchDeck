@@ -211,9 +211,10 @@ struct DeckView: View {
     }
 
     private func dragChanged(page pageIndex: Int, index: Int, button: DeckButton?, location: CGPoint,
-                             columns: Int, size: CGSize) {
+                             first: Bool, columns: Int, size: CGSize) {
         if lift == nil {
-            guard let button else { return }
+            // 끄는 도중 옮기기 모드가 끝났으면(잠김 등) 손을 뗄 때까지 다시 집어 들지 않는다
+            guard first, let button else { return }
             arranging = true
             lift = Lift(page: pageIndex, index: index, button: button, location: location)
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
@@ -268,9 +269,9 @@ struct DeckView: View {
                             highlighted: lift != nil && page == pageIndex && target == index
                                 && !(lift?.page == pageIndex && lift?.index == index),
                             canDrag: client.canArrange,
-                            onDragChanged: { location in
+                            onDragChanged: { location, first in
                                 dragChanged(page: pageIndex, index: index, button: button, location: location,
-                                            columns: columns, size: size)
+                                            first: first, columns: columns, size: size)
                             },
                             onDragEnded: { location in dragEnded(at: location, columns: columns, size: size) },
                             onTap: { client.press(page: pageIndex, index: index) },
