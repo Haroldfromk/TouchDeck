@@ -17,10 +17,16 @@ public enum AlacrittyCommand {
         let dir = directory.map(expandTilde) ?? NSHomeDirectory()
         var args = ["-na", appPath, "--args", "--working-directory", dir]
         if let command {
-            let script = "eval \(singleQuoted(command))"
-            args += ["-e", "/bin/zsh", shellFlags, keepOpen ? "\(script); exec zsh" : script]
+            args += ["-e", "/bin/zsh", shellFlags, script(command: command, keepOpen: keepOpen)]
         }
         return args
+    }
+
+    /// 셸에 넘길 스크립트. 명령은 작은따옴표로 감싸 eval에 넘긴다(명령 끝 주석이나 안 닫힌 따옴표가 뒤를 삼키지 않게).
+    /// 창을 남기면 뒤에 exec zsh를 붙여 셸을 이어 둔다. 실행 인자로 명령을 넘기는 터미널(Alacritty, Ghostty, WezTerm, kitty)이 같이 쓴다
+    public static func script(command: String, keepOpen: Bool) -> String {
+        let script = "eval \(singleQuoted(command))"
+        return keepOpen ? "\(script); exec zsh" : script
     }
 
     /// 실행 전에 무엇을 확인할지.
@@ -64,7 +70,7 @@ public enum AlacrittyCommand {
         return path
     }
 
-    private static func singleQuoted(_ text: String) -> String {
+    public static func singleQuoted(_ text: String) -> String {
         "'\(text.replacingOccurrences(of: "'", with: #"'\''"#))'"
     }
 }
