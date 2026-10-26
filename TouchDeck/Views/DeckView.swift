@@ -23,6 +23,12 @@ struct DeckView: View {
         var location: CGPoint
     }
 
+    /// 페이지와 칸 번호
+    struct Slot: Equatable {
+        let page: Int
+        let index: Int
+    }
+
     @Bindable var client: DeckClient
     @State private var page = 0
     @State private var editing: EditTarget?
@@ -38,6 +44,8 @@ struct DeckView: View {
     /// 끄는 버튼이 놓일 칸(지금 보이는 페이지)
     @State private var target: Int?
     @State private var pager = EdgePager()
+    /// 길게 눌러 떠오른 버튼. 위에 "놓으면 설정, 끌면 옮기기" 말풍선을 띄운다
+    @State private var popped: Slot?
     /// 손으로 페이지를 미는 중인 거리
     @GestureState(resetTransaction: Transaction(animation: .spring(duration: 0.3))) private var swipe: CGFloat = 0
     @Environment(\.scenePhase) private var scenePhase
@@ -162,6 +170,7 @@ struct DeckView: View {
                 .frame(width: size.width, height: size.height, alignment: .leading)
                 .animation(.spring(duration: 0.3), value: page)
                 .overlay { liftedTile(columns: columns, size: size) }
+                .overlay { holdHint(columns: columns, size: size) }
                 .contentShape(.rect)
                 .gesture(pageSwipe(width: size.width))
                 // 손가락이 가장자리에 가만히 있어도 시간이 가야 페이지가 넘어간다
@@ -207,6 +216,23 @@ struct DeckView: View {
                 .shadow(color: .black.opacity(0.45), radius: 14, y: 8)
                 .position(lift.location)
                 .allowsHitTesting(false)
+        }
+    }
+
+    /// 떠오른 버튼 위(맨 윗줄이면 아래)에 띄우는 말풍선. 화면 밖으로 나가지 않게 가로 위치를 안쪽으로 당기고, 꼬리는 버튼을 가리킨다
+    @ViewBuilder
+    private func holdHint(columns: Int, size: CGSize) -> some View {
+        if let popped, popped.page == page, lift == nil {
+            let cell = GridSlot.frame(of: popped.index, size: size, columns: columns, spacing: Self.spacing)
+            let above = popped.index >= columns
+            let halfWidth: CGFloat = 95
+            let x = min(max(cell.midX, halfWidth), size.width - halfWidth)
+            HoldHint(text: client.canArrange ? "놓으면 설정, 끌면 옮기기" : "놓으면 설정",
+                     pointsDown: above, pointerOffset: max(-80, min(80, cell.midX - x)))
+                .fixedSize()
+                .position(x: x, y: above ? cell.minY - 24 : cell.maxY + 24)
+                .allowsHitTesting(false)
+                .transition(.opacity)
         }
     }
 
@@ -274,6 +300,10 @@ struct DeckView: View {
                                             first: first, columns: columns, size: size)
                             },
                             onDragEnded: { location in dragEnded(at: location, columns: columns, size: size) },
+                            onPopChanged: { on in
+                                let slot = Slot(page: pageIndex, index: index)
+                                if on { popped = slot } else if popped == slot { popped = nil }
+                            },
                             onTap: { client.press(page: pageIndex, index: index) },
                             onEdit: { editing = EditTarget(page: pageIndex, index: index, button: button) }
                         )
@@ -333,5 +363,45 @@ struct PageDots: View {
         .frame(height: 10)
         .accessibilityElement()
         .accessibilityLabel("\(count)페이지 중 \(current + 1)페이지")
+    }
+}
+
+/// 길게 누른 버튼에 붙는 말풍선
+private struct HoldHint: View {
+    let text: String
+    /// 꼬리가 아래(버튼이 말풍선 아래에 있음)
+    let pointsDown: Bool
+    let pointerOffset: CGFloat
+
+    var body: some View {
+        VStack(spacing: 0) {
+            if !pointsDown { pointer.rotationEffect(.degrees(180)) }
+            Text(text)
+                .font(.callout.weight(.semibold))
+                .foregroundStyle(DeckTheme.legend)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
+                .background(DeckTheme.keycapTop, in: .rect(cornerRadius: 10))
+            if pointsDown { pointer }
+        }
+        .shadow(color: .black.opacity(0.35), radius: 8, y: 4)
+    }
+
+    private var pointer: some View {
+        Triangle()
+            .fill(DeckTheme.keycapTop)
+            .frame(width: 16, height: 8)
+            .offset(x: pointerOffset)
+    }
+}
+
+private struct Triangle: Shape {
+    func path(in rect: CGRect) -> Path {
+        Path { p in
+            p.move(to: CGPoint(x: rect.minX, y: rect.minY))
+            p.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
+            p.addLine(to: CGPoint(x: rect.midX, y: rect.maxY))
+            p.closeSubpath()
+        }
     }
 }

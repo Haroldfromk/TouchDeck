@@ -60,3 +60,12 @@ import Testing
     #expect(p.update(x: 390, width: 400, page: 0, pageCount: 3, now: 0.8) == 0)
     #expect(p.update(x: 390, width: 400, page: 0, pageCount: 3, now: 0.91) == 1)
 }
+
+@Test func cellFrameMatchesSlotLookup() {
+    let size = CGSize(width: 328, height: 442)   // 3열 4줄, 칸 100, 간격 14
+    #expect(GridSlot.frame(of: 0, size: size, columns: 3, spacing: 14) == CGRect(x: 0, y: 0, width: 100, height: 100))
+    #expect(GridSlot.frame(of: 5, size: size, columns: 3, spacing: 14) == CGRect(x: 228, y: 114, width: 100, height: 100))
+    #expect(GridSlot.frame(of: 11, size: size, columns: 3, spacing: 14) == CGRect(x: 228, y: 342, width: 100, height: 100))
+    let wide = CGSize(width: 442, height: 328)   // 4열 3줄
+    #expect(GridSlot.frame(of: 7, size: wide, columns: 4, spacing: 14) == CGRect(x: 342, y: 114, width: 100, height: 100))
+}

@@ -22,6 +22,8 @@ struct ButtonTile: View {
     var onDragChanged: (CGPoint, Bool) -> Void = { _, _ in }
     /// 끌던 손을 뗐을 때. 위치를 모르면 nil
     var onDragEnded: (CGPoint?) -> Void = { _ in }
+    /// 길게 누르기가 된 버튼이 떠올랐다(true), 내려앉았다(false). 위에 말풍선을 띄운다
+    var onPopChanged: (Bool) -> Void = { _ in }
     let onTap: () -> Void
     let onEdit: () -> Void
 
@@ -37,7 +39,9 @@ struct ButtonTile: View {
     @State private var endHandled = false
     /// 옮기기 모드면 길게 누르지 않고 바로 끈다. 끄는 도중 옮기기 모드가 켜져도 손짓이 바뀌지 않게, 손을 뗐을 때만 따라 바꾼다
     @State private var quickDrag = false
-    private var down: Bool { pressed || tapFlash }
+    /// 길게 누르기가 되어 떠오른 상태. 아이패드는 진동이 없어서 이걸로 길게 누르기가 된 걸 안다
+    private var popped: Bool { longFired && !dragStarted && button != nil }
+    private var down: Bool { (pressed || tapFlash) && !popped }
 
     var body: some View {
         GeometryReader { geo in
@@ -51,6 +55,9 @@ struct ButtonTile: View {
             }
             .frame(width: geo.size.width, height: geo.size.height)
             .modifier(Wiggle(on: arranging && button != nil && !lifted && !reduceMotion, phase: phase))
+            .scaleEffect(popped ? 1.06 : 1)
+            .shadow(color: .black.opacity(popped ? 0.4 : 0), radius: 10, y: 6)
+            .animation(.spring(duration: 0.18), value: popped)
         }
         .contentShape(.rect)
         .onTapGesture {
@@ -67,6 +74,7 @@ struct ButtonTile: View {
         }
         .simultaneousGesture(pressDrag, including: button == nil ? .subviews : .all)
         .onAppear { quickDrag = arranging }
+        .onChange(of: popped) { _, now in onPopChanged(now) }
         .onChange(of: arranging) { _, now in
             if !holding { quickDrag = now }
         }

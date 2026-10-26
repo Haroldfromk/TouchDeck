@@ -14,6 +14,17 @@ public enum GridSlot {
         return row * columns + column
     }
 
+    /// 칸 하나가 그리드 안에서 차지하는 자리. 길게 누른 버튼 위에 말풍선을 띄울 때 쓴다
+    public static func frame(of index: Int, size: CGSize, columns: Int, spacing: CGFloat) -> CGRect {
+        let rows = DeckConstants.slotsPerPage / columns
+        let cellWidth = (size.width - spacing * CGFloat(columns - 1)) / CGFloat(columns)
+        let cellHeight = (size.height - spacing * CGFloat(rows - 1)) / CGFloat(rows)
+        let column = index % columns
+        let row = index / columns
+        return CGRect(x: CGFloat(column) * (cellWidth + spacing), y: CGFloat(row) * (cellHeight + spacing),
+                      width: cellWidth, height: cellHeight)
+    }
+
     private static func cell(_ value: CGFloat, length: CGFloat, spacing: CGFloat, count: Int) -> Int? {
         let stride = length + spacing
         let n = Int((value / stride).rounded(.down))
